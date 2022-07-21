@@ -1,5 +1,5 @@
-'''Create mesh from SDF
-'''
+"""Create mesh from SDF
+"""
 
 import logging
 import numpy as np
@@ -9,10 +9,22 @@ import time
 import torch
 from collections import OrderedDict
 
-'''Adapted from the DeepSDF repository https://github.com/facebookresearch/DeepSDF
-'''
+"""Adapted from the DeepSDF repository https://github.com/facebookresearch/DeepSDF
+"""
 
-def create_mesh(model, filename, subject_idx=0, embedding=None, N=128, max_batch=64 ** 3, offset=None, scale=None,level=0.0, get_color=True):
+
+def create_mesh(
+    model,
+    filename,
+    subject_idx=0,
+    embedding=None,
+    N=128,
+    max_batch=64**3,
+    offset=None,
+    scale=None,
+    level=0.0,
+    get_color=True,
+):
     start = time.time()
     ply_filename = filename
 
@@ -22,8 +34,8 @@ def create_mesh(model, filename, subject_idx=0, embedding=None, N=128, max_batch
     voxel_origin = [-1, -1, -1]
     voxel_size = 2.0 / (N - 1)
 
-    overall_index = torch.arange(0, N ** 3, 1, out=torch.LongTensor())
-    samples = torch.zeros(N ** 3, 4)
+    overall_index = torch.arange(0, N**3, 1, out=torch.LongTensor())
+    samples = torch.zeros(N**3, 4)
 
     # transform first 3 columns
     # to be the x, y, z index
@@ -37,21 +49,23 @@ def create_mesh(model, filename, subject_idx=0, embedding=None, N=128, max_batch
     samples[:, 1] = (samples[:, 1] * voxel_size) + voxel_origin[1]
     samples[:, 2] = (samples[:, 2] * voxel_size) + voxel_origin[0]
 
-    num_samples = N ** 3
+    num_samples = N**3
 
     samples.requires_grad = False
 
     head = 0
     if embedding is None:
-        subject_idx = torch.Tensor([subject_idx]).squeeze().long().cuda()[None,...]
+        subject_idx = torch.Tensor([subject_idx]).squeeze().long().cuda()[None, ...]
         embedding = model.get_latent_code(subject_idx)
 
     while head < num_samples:
         print(head)
-        sample_subset = samples[head : min(head + max_batch, num_samples), 0:3].cuda()[None,...]
+        sample_subset = samples[head : min(head + max_batch, num_samples), 0:3].cuda()[
+            None, ...
+        ]
         samples[head : min(head + max_batch, num_samples), 3] = (
-            model.inference(sample_subset,embedding)
-            .squeeze()#.squeeze(1)
+            model.inference(sample_subset, embedding)
+            .squeeze()  # .squeeze(1)
             .detach()
             .cpu()
         )
@@ -71,7 +85,7 @@ def create_mesh(model, filename, subject_idx=0, embedding=None, N=128, max_batch
             ply_filename + ".ply",
             offset,
             scale,
-            level
+            level,
         )
     else:
         convert_sdf_samples_with_color_to_ply(
@@ -83,11 +97,11 @@ def create_mesh(model, filename, subject_idx=0, embedding=None, N=128, max_batch
             ply_filename + ".ply",
             offset,
             scale,
-            level
+            level,
         )
 
 
-def get_mesh_color(mesh_points,embedding,model):
+def get_mesh_color(mesh_points, embedding, model):
 
     model.eval()
 
@@ -96,24 +110,29 @@ def get_mesh_color(mesh_points,embedding,model):
     mesh_colors = np.zeros_like(mesh_points)
     num_samples = mesh_points.shape[0]
 
-    print('num_samples',num_samples)
-    max_batch=64 ** 3
-
+    print("num_samples", num_samples)
+    max_batch = 64**3
 
     head = 0
     while head < num_samples:
         print(head)
-        sample_subset = torch.from_numpy(mesh_points[head : min(head + max_batch, num_samples), 0:3]).float().cuda()[None,...]
+        sample_subset = (
+            torch.from_numpy(
+                mesh_points[head : min(head + max_batch, num_samples), 0:3]
+            )
+            .float()
+            .cuda()[None, ...]
+        )
 
         mesh_colors[head : min(head + max_batch, num_samples), 0:3] = (
-            model.get_template_coords(sample_subset,embedding)
-            .squeeze()#.squeeze(1)
+            model.get_template_coords(sample_subset, embedding)
+            .squeeze()  # .squeeze(1)
             .detach()
             .cpu()
         )
         head += max_batch
 
-    mesh_colors = np.clip(mesh_colors/2+0.5,0,1) # normalize color to 0-1
+    mesh_colors = np.clip(mesh_colors / 2 + 0.5, 0, 1)  # normalize color to 0-1
 
     return mesh_colors
 
@@ -142,7 +161,12 @@ def convert_sdf_samples_to_ply(
 
     numpy_3d_sdf_tensor = pytorch_3d_sdf_tensor.numpy()
 
-    verts, faces, normals, values = np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0)
+    verts, faces, normals, values = (
+        np.zeros((0, 3)),
+        np.zeros((0, 3)),
+        np.zeros((0, 3)),
+        np.zeros(0),
+    )
     try:
         verts, faces, normals, values = skimage.measure.marching_cubes_lewiner(
             numpy_3d_sdf_tensor, level=level, spacing=[voxel_size] * 3
@@ -218,7 +242,12 @@ def convert_sdf_samples_with_color_to_ply(
 
     numpy_3d_sdf_tensor = pytorch_3d_sdf_tensor.numpy()
 
-    verts, faces, normals, values = np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0)
+    verts, faces, normals, values = (
+        np.zeros((0, 3)),
+        np.zeros((0, 3)),
+        np.zeros((0, 3)),
+        np.zeros(0),
+    )
     try:
         verts, faces, normals, values = skimage.measure.marching_cubes_lewiner(
             numpy_3d_sdf_tensor, level=level, spacing=[voxel_size] * 3
@@ -239,9 +268,8 @@ def convert_sdf_samples_with_color_to_ply(
     if offset is not None:
         mesh_points = mesh_points - offset
 
-
-    mesh_colors = get_mesh_color(mesh_points,embedding,model)
-    mesh_colors = np.clip(mesh_colors*255,0,255).astype(np.uint8)
+    mesh_colors = get_mesh_color(mesh_points, embedding, model)
+    mesh_colors = np.clip(mesh_colors * 255, 0, 255).astype(np.uint8)
 
     # try writing to the ply file
 
@@ -250,7 +278,9 @@ def convert_sdf_samples_with_color_to_ply(
 
     verts_tuple = np.zeros((num_verts,), dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")])
 
-    colors_tuple = np.zeros((num_verts,), dtype=[("red", "u1"), ("green", "u1"), ("blue", "u1")])
+    colors_tuple = np.zeros(
+        (num_verts,), dtype=[("red", "u1"), ("green", "u1"), ("blue", "u1")]
+    )
 
     for i in range(0, num_verts):
         verts_tuple[i] = tuple(mesh_points[i, :])
@@ -258,14 +288,13 @@ def convert_sdf_samples_with_color_to_ply(
     for i in range(0, num_verts):
         colors_tuple[i] = tuple(mesh_colors[i, :])
 
-    verts_all = np.empty(num_verts,verts_tuple.dtype.descr + colors_tuple.dtype.descr)
+    verts_all = np.empty(num_verts, verts_tuple.dtype.descr + colors_tuple.dtype.descr)
 
     for prop in verts_tuple.dtype.names:
         verts_all[prop] = verts_tuple[prop]
 
     for prop in colors_tuple.dtype.names:
         verts_all[prop] = colors_tuple[prop]
-
 
     faces_building = []
     for i in range(0, num_faces):
@@ -275,7 +304,7 @@ def convert_sdf_samples_with_color_to_ply(
     el_verts = plyfile.PlyElement.describe(verts_all, "vertex")
     el_faces = plyfile.PlyElement.describe(faces_tuple, "face")
 
-    ply_data = plyfile.PlyData([el_verts, el_faces],text=True)
+    ply_data = plyfile.PlyData([el_verts, el_faces], text=True)
     logging.debug("saving mesh to %s" % (ply_filename_out))
     ply_data.write(ply_filename_out)
 
