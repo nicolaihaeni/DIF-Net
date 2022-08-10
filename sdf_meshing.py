@@ -7,6 +7,7 @@ import plyfile
 import skimage.measure
 import time
 import torch
+import open3d as o3d
 from collections import OrderedDict
 
 """Adapted from the DeepSDF repository https://github.com/facebookresearch/DeepSDF
@@ -16,14 +17,15 @@ from collections import OrderedDict
 def create_mesh(
     model,
     filename,
-    subject_idx=0,
+    model_input,
     embedding=None,
     N=128,
     max_batch=64**3,
     offset=None,
     scale=None,
     level=0.0,
-    get_color=True,
+    get_color=False,
+    template=False,
 ):
     start = time.time()
     ply_filename = filename
@@ -32,7 +34,7 @@ def create_mesh(
 
     # NOTE: the voxel_origin is actually the (bottom, left, down) corner, not the middle
     voxel_origin = [-1, -1, -1]
-    voxel_size = 2.0 / (N - 1)
+    voxel_size = 2.4 / (N - 1)
 
     overall_index = torch.arange(0, N**3, 1, out=torch.LongTensor())
     samples = torch.zeros(N**3, 4)
@@ -40,8 +42,8 @@ def create_mesh(
     # transform first 3 columns
     # to be the x, y, z index
     samples[:, 2] = overall_index % N
-    samples[:, 1] = (overall_index.long() / N) % N
-    samples[:, 0] = ((overall_index.long() / N) / N) % N
+    samples[:, 1] = (overall_index.long() // N) % N
+    samples[:, 0] = ((overall_index.long() // N) // N) % N
 
     # transform first 3 columns
     # to be the x, y, z coordinate
@@ -52,23 +54,30 @@ def create_mesh(
     num_samples = N**3
 
     samples.requires_grad = False
+    if embedding is None:
+        embedding = model.get_latent_code(model_input)
+        embedding = embedding[0].unsqueeze(0)
 
     head = 0
-    if embedding is None:
-        subject_idx = torch.Tensor([subject_idx]).squeeze().long().cuda()[None, ...]
-        embedding = model.get_latent_code(subject_idx)
-
     while head < num_samples:
         print(head)
         sample_subset = samples[head : min(head + max_batch, num_samples), 0:3].cuda()[
             None, ...
         ]
-        samples[head : min(head + max_batch, num_samples), 3] = (
-            model.inference(sample_subset, embedding)
-            .squeeze()  # .squeeze(1)
-            .detach()
-            .cpu()
-        )
+        if template:
+            samples[head : min(head + max_batch, num_samples), 3] = (
+                model.get_template_field(sample_subset)
+                .squeeze()  # .squeeze(1)
+                .detach()
+                .cpu()
+            )
+        else:
+            samples[head : min(head + max_batch, num_samples), 3] = (
+                model.inference(sample_subset, embedding)
+                .squeeze()  # .squeeze(1)
+                .detach()
+                .cpu()
+            )
         head += max_batch
 
     sdf_values = samples[:, 3]
@@ -188,7 +197,6 @@ def convert_sdf_samples_to_ply(
         mesh_points = mesh_points - offset
 
     # try writing to the ply file
-
     num_verts = verts.shape[0]
     num_faces = faces.shape[0]
 
@@ -313,3 +321,17 @@ def convert_sdf_samples_with_color_to_ply(
             time.time() - start_time
         )
     )
+
+
+def save_poincloud_ply(vertices, filename):
+    pcd = o3d.geometry.PointCloud()
+
+    vertices = vertices.detach().cpu().numpy()
+    if len(vertices.shape) == 3:
+        vertices = vertices[0]
+    if vertices.shape[1] != 3:
+        vertices = np.transpose(vertices)
+
+    pcd.points = o3d.utility.Vector3dVector(vertices)
+    o3d.io.write_point_cloud(filename, pcd)
+    return

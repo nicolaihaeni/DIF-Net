@@ -1,10 +1,10 @@
 batch_size: 32
-epochs: 70
-epochs_til_checkpoint: 5
+epochs: 100
+epochs_til_checkpoint: 10
 expand: 0.01
 experiment_name: plane
-hidden_num: 128
-latent_dim: 128
+hidden_num: 256
+latent_dim: 1024
 logging_root: ./logs
 loss_correct: 100.0
 loss_grad_deform: 2
@@ -16,4 +16,6 @@ num_instances: 3500
 on_surface_points: 4000
 point_cloud_path: datasets/plane/surface_pts_n_normal
 steps_til_summary: 100
-train_split: split/train/plane.txt
+steps_til_validation: 1000
+#train_split: split/train/plane.txt
+train_split: split/eval/plane.txt

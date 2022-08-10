@@ -19,10 +19,12 @@ def train(
     epochs,
     lr,
     steps_til_summary,
+    steps_til_validation,
     epochs_til_checkpoint,
     model_dir,
+    mesh_dir,
     loss_schedules=None,
-    **kwargs
+    **kwargs,
 ):
 
     print("Training Info:")
@@ -53,19 +55,10 @@ def train(
         train_losses = []
         for epoch in range(epochs):
             if not epoch % epochs_til_checkpoint and epoch:
-                    torch.save(
-                        model.module.state_dict(),
-                        os.path.join(checkpoints_dir, "model_epoch_%04d.pth" % epoch),
-                    )
-                else:
-                    embed_save = embedding.detach().squeeze().cpu().numpy()
-                    np.savetxt(
-                        os.path.join(
-                            checkpoints_dir, "embedding_epoch_%04d.txt" % epoch
-                        ),
-                        embed_save,
-                    )
-
+                torch.save(
+                    model.module.state_dict(),
+                    os.path.join(checkpoints_dir, "model_epoch_%04d.pth" % epoch),
+                )
                 np.savetxt(
                     os.path.join(
                         checkpoints_dir, "train_losses_epoch_%04d.txt" % epoch
@@ -99,12 +92,6 @@ def train(
                 train_losses.append(train_loss.item())
                 writer.add_scalar("total_train_loss", train_loss, total_steps)
 
-                if not total_steps % steps_til_summary:
-                    torch.save(
-                            model.module.state_dict(),
-                            os.path.join(checkpoints_dir, "model_current.pth"),
-                        )
-
                 optim.zero_grad()
                 train_loss.backward()
                 optim.step()
@@ -117,22 +104,35 @@ def train(
                         % (epoch, train_loss, time.time() - start_time)
                     )
 
+                if not total_steps % steps_til_summary:
+                    torch.save(
+                        model.module.state_dict(),
+                        os.path.join(checkpoints_dir, "model_current.pth"),
+                    )
+
+                if not total_steps % steps_til_validation:
+                    # First we save the deformed mesh
+                    model.eval()
+                    sdf_meshing.create_mesh(
+                        model.module,
+                        os.path.join(mesh_dir, f"deformed_mesh_{total_steps}"),
+                        model_input,
+                    )
+
+                    # Then we also save the template mesh
+                    sdf_meshing.create_mesh(
+                        model.module,
+                        os.path.join(mesh_dir, f"template_mesh_{total_steps}"),
+                        model_input,
+                        template=True,
+                    )
+                    model.train()
+
                 total_steps += 1
 
         torch.save(
             model.module.cpu().state_dict(),
             os.path.join(checkpoints_dir, "model_final.pth"),
-        )
-
-        embedding = model.get_latent_code(model_input)
-        embedding = embedding[0].unsqueeze(0)
-        sdf_meshing.create_mesh(
-            model,
-            os.path.join(checkpoints_dir, "test"),
-            embedding=embedding,
-            N=256,
-            level=0,
-            get_color=False,
         )
 
     np.savetxt(

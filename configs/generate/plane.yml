@@ -1,8 +1,7 @@
-experiment_name: 'plane'
-checkpoint_path: 'models/plane/checkpoints/model_epoch_0060.pth'
-num_instances: 3500
-latent_dim: 128
-model_type: 'sine'
-hidden_num: 128
-hyper_hidden_layers: 1
-hyper_hidden_features: 256
+experiment_name: plane
+hidden_num: 256
+latent_dim: 1024
+model_type: sine
+point_cloud_path: datasets/plane/surface_pts_n_normal
+train_split: split/eval/plane.txt
+checkpoint_path: logs/plane/checkpoints/model_final.pth

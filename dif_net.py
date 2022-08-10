@@ -16,7 +16,7 @@ class DeformedImplicitField(nn.Module):
     def __init__(
         self,
         num_instances,
-        latent_dim=128,
+        latent_dim=1024,
         model_type="sine",
         hyper_hidden_layers=1,
         hyper_hidden_features=256,
@@ -29,7 +29,7 @@ class DeformedImplicitField(nn.Module):
 
         # latent code embedding for training subjects
         self.latent_dim = latent_dim
-        self.encoder = PointNetEncoder(self.latent_dim)
+        self.encoder = PointNetEncoder()
 
         ## DIF-Net
         # template field
@@ -67,7 +67,7 @@ class DeformedImplicitField(nn.Module):
         return hypo_params, embedding
 
     def get_latent_code(self, model_input):
-        embedding = self.encoder(model_input["farthest_coords"])
+        embedding, _, _ = self.encoder(model_input["farthest_coords"])
         return embedding
 
     # for generation
@@ -107,15 +107,13 @@ class DeformedImplicitField(nn.Module):
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
         # get network weights for Deform-net using Hyper-net
-        embedding = self.encoder(model_input["farthest_coords"])
+        embedding, _, _ = self.encoder(model_input["farthest_coords"])
         hypo_params = self.hyper_net(embedding)
 
         # [deformation field, correction field]
         model_output = self.deform_net(model_input, params=hypo_params)
-
-        deformation = model_output["model_out"][
-            :, :, :3
-        ]  # 3 dimensional deformation field
+        # 3 dimensional deformation field
+        deformation = model_output["model_out"][:, :, :3]
         correction = model_output["model_out"][:, :, 3:]  # scalar correction field
         new_coords = coords + deformation  # deform into template space
 
@@ -140,7 +138,6 @@ class DeformedImplicitField(nn.Module):
         )  # gradient of deformation wrt. input position
 
         model_input_temp = {"coords": new_coords}
-
         model_output_temp = self.template_field(model_input_temp)
 
         sdf = model_output_temp["model_out"]  # SDF value in template space
@@ -163,7 +160,7 @@ class DeformedImplicitField(nn.Module):
             "grad_temp": grad_temp,
             "grad_deform": grad_deform,
             "model_out": sdf_final,
-            "latent_vec": embedding,
+            # "latent_vec": embedding,
             "hypo_params": hypo_params,
             "grad_sdf": grad_sdf,
             "sdf_correct": correction,
