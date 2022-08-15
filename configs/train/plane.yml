@@ -12,10 +12,8 @@ loss_grad_temp: 100.0
 lr: 0.0001
 max_points: 200000
 model_type: sine
-num_instances: 3500
 on_surface_points: 4000
-point_cloud_path: datasets/plane/
+point_cloud_path: /home/isleri/data/gen_sdf
 steps_til_summary: 100
 steps_til_validation: 1000
-#train_split: split/train/plane.txt
 train_split: split/plane.json

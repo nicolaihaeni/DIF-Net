@@ -24,7 +24,7 @@ if __name__ == "__main__":
     p = configargparse.ArgumentParser()
     p.add_argument("--config", type=str, default="", help="training configuration.")
     p.add_argument(
-        "--train_split", type=str, default="", help="training subject names."
+            "--split_file", type=str, default="", help="training subject names."
     )
 
     p.add_argument(
@@ -100,15 +100,6 @@ if __name__ == "__main__":
     )
 
     p.add_argument(
-        "--num_instances",
-        type=int,
-        default=5,
-        help="numbers of instance in the training set.",
-    )
-    p.add_argument(
-        "--expand", type=float, default=-1, help="expansion of shape surface."
-    )
-    p.add_argument(
         "--max_points",
         type=int,
         default=200000,
@@ -139,7 +130,7 @@ if __name__ == "__main__":
     ]
     sdf_dataset = dataset.PointCloudDataset(
         root_dir=os.path.join(meta_params["point_cloud_path"],
-        split_file=meta_params['train_split'],
+        split_file=meta_params['split_file'],
         train=True,
         **meta_params
     )
@@ -153,8 +144,7 @@ if __name__ == "__main__":
         drop_last=True,
     )
 
-    print("Total subjects: ", sdf_dataset.num_instances)
-    meta_params["num_instances"] = sdf_dataset.num_instances
+    print("Total subjects: ", len(sdf_dataset))
 
     # define DIF-Net
     model = DeformedImplicitField(**meta_params)
