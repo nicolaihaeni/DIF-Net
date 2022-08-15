@@ -7,9 +7,9 @@ from scipy.io import loadmat
 
 VISUALIZE = True
 
-free_dir = "/home/isleri/haeni001/code/DIF-Net/datasets/plane/free_space_pts"
-sdf_dir = "/home/isleri/haeni001/code/DIF-Net/datasets/plane/surface_pts_n_normal"
-output_dir = "/home/isleri/haeni001/code/DIF-Net/datasets/plane/"
+free_dir = "/home/nicolai/phd/code/DIF-Net/datasets/plane/free_space_pts"
+sdf_dir = "/home/nicolai/phd/code/DIF-Net/datasets/plane/surface_pts_n_normal"
+output_dir = "/home/nicolai/phd/code/DIF-Net/datasets/plane/"
 
 names = sorted(os.listdir(free_dir))
 for name in names:
@@ -27,9 +27,9 @@ for name in names:
 
     if VISUALIZE:
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.points = o3d.utility.Vector3dVector(points[np.where(sdf <= 0.0)])
         colors = np.zeros_like(points)
-        colors[np.where(sdf >= 0)] = [1, 0, 0]
-        colors[np.where(sdf < 0)] = [0, 1, 0]
-        pcd.colors = o3d.utility.Vector3dVector(colors)
+        colors[np.where(sdf > 0)] = [1, 0, 0]
+        colors[np.where(sdf <= 0)] = [0, 1, 0]
+        pcd.colors = o3d.utility.Vector3dVector(colors[np.where(sdf <= 0.0)])
         o3d.visualization.draw_geometries([pcd])

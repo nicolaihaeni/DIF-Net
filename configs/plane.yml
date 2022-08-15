@@ -1,5 +1,5 @@
 batch_size: 32
-epochs: 100
+epochs: 1000
 epochs_til_checkpoint: 10
 expand: 0.01
 experiment_name: plane
@@ -12,10 +12,8 @@ loss_grad_temp: 100.0
 lr: 0.0001
 max_points: 200000
 model_type: sine
-num_instances: 3500
-on_surface_points: 4000
+on_surface_points: 4096
 point_cloud_path: datasets/plane/
 steps_til_summary: 100
 steps_til_validation: 1000
-#train_split: split/train/plane.txt
 train_split: split/plane.json

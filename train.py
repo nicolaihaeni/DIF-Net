@@ -41,7 +41,7 @@ if __name__ == "__main__":
     p.add_argument("--batch_size", type=int, default=256, help="training batch size.")
     p.add_argument("--lr", type=float, default=1e-4, help="learning rate. default=1e-4")
     p.add_argument(
-        "--epochs", type=int, default=500, help="Number of epochs to train for."
+        "--epochs", type=int, default=1000, help="Number of epochs to train for."
     )
 
     p.add_argument(
@@ -137,9 +137,10 @@ if __name__ == "__main__":
     data_path = [
         os.path.join(meta_params["point_cloud_path"], f + ".mat") for f in all_names
     ]
-    sdf_dataset = dataset.PointCloudMulti(
-        root_dir=data_path,
-        max_num_instances=meta_params["num_instances"],
+    sdf_dataset = dataset.PointCloudDataset(
+        root_dir=os.path.join(meta_params["point_cloud_path"],
+        split_file=meta_params['train_split'],
+        train=True,
         **meta_params
     )
     dataloader = DataLoader(
