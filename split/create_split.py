@@ -1,11 +1,12 @@
 import os
 import json
 
-test_file = "./plane_test.txt"
-train_file = "./plane_train.txt"
+category = "02691156"
+train_file = "/home/isleri/haeni001/code/DIF-Net/split/train/plane.txt"
+val_file = "/home/isleri/haeni001/code/DIF-Net/split/eval/plane.txt"
 
 test_lines = []
-with open(test_file, "r") as f:
+with open(val_file, "r") as f:
     for line in f.readlines():
         test_lines.append(line.rstrip())
 
