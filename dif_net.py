@@ -15,7 +15,6 @@ from pointnet import PointNetEncoder
 class DeformedImplicitField(nn.Module):
     def __init__(
         self,
-        num_instances,
         latent_dim=1024,
         model_type="sine",
         hyper_hidden_layers=1,
@@ -24,9 +23,6 @@ class DeformedImplicitField(nn.Module):
         **kwargs
     ):
         super().__init__()
-        # 　We use auto-decoder framework following Park et al. 2019 (DeepSDF),
-        # therefore, the model consists of latent codes for each subjects and DIF-Net decoder.
-
         # latent code embedding for training subjects
         self.latent_dim = latent_dim
         self.encoder = PointNetEncoder()
@@ -59,7 +55,6 @@ class DeformedImplicitField(nn.Module):
             hyper_hidden_features=hyper_hidden_features,
             hypo_module=self.deform_net,
         )
-        print(self)
 
     def get_hypo_net_weights(self, model_input):
         embedding = self.encoder(model_input["farthest_coords"])

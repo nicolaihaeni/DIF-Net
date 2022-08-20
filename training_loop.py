@@ -16,6 +16,7 @@ import sdf_meshing
 def train(
     model,
     train_dataloader,
+    val_dataloader,
     epochs,
     lr,
     steps_til_summary,
@@ -28,14 +29,14 @@ def train(
 ):
 
     print("Training Info:")
-    print("data_path:\t\t", kwargs["point_cloud_path"])
+    print("data_path:\t\t", kwargs["root_dir"])
     print("num_instances:\t\t", kwargs["num_instances"])
     print("batch_size:\t\t", kwargs["batch_size"])
     print("epochs:\t\t\t", epochs)
     print("learning rate:\t\t", lr)
     for key in kwargs:
         if "loss" in key:
-            print(key + ":\t", kwargs[key])
+            print(key + ":\t\t", kwargs[key])
 
     optim = torch.optim.Adam(lr=lr, params=model.parameters())
 
@@ -113,6 +114,32 @@ def train(
                 if not total_steps % steps_til_validation:
                     # First we save the deformed mesh
                     model.eval()
+                    val_losses = []
+                    for step, (model_input, gt) in enumerate(val_dataloader):
+                        start_time = time.time()
+
+                        model_input = {
+                            key: value.cuda() for key, value in model_input.items()
+                        }
+                        gt = {key: value.cuda() for key, value in gt.items()}
+
+                        losses = model(model_input, gt, **kwargs)
+
+                        val_loss = 0.0
+                        for loss_name, loss in losses.items():
+                            single_loss = loss.mean()
+
+                            if (
+                                loss_schedules is not None
+                                and loss_name in loss_schedules
+                            ):
+                                single_loss *= loss_schedules[loss_name](total_steps)
+                            val_loss += single_loss
+                        val_losses.append(val_loss)
+                    val_loss = sum(val_losses) / len(val_losses)
+                    writer.add_scalar("val_loss", val_loss, total_steps)
+                    tqdm.write(f"Epoch {epoch} Val loss {val_loss}")
+
                     sdf_meshing.create_mesh(
                         model.module,
                         os.path.join(mesh_dir, f"deformed_mesh_{total_steps}"),

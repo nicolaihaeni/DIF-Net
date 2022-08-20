@@ -7,7 +7,6 @@ import plyfile
 import skimage.measure
 import time
 import torch
-import open3d as o3d
 from collections import OrderedDict
 
 """Adapted from the DeepSDF repository https://github.com/facebookresearch/DeepSDF
@@ -321,17 +320,3 @@ def convert_sdf_samples_with_color_to_ply(
             time.time() - start_time
         )
     )
-
-
-def save_poincloud_ply(vertices, filename):
-    pcd = o3d.geometry.PointCloud()
-
-    vertices = vertices.detach().cpu().numpy()
-    if len(vertices.shape) == 3:
-        vertices = vertices[0]
-    if vertices.shape[1] != 3:
-        vertices = np.transpose(vertices)
-
-    pcd.points = o3d.utility.Vector3dVector(vertices)
-    o3d.io.write_point_cloud(filename, pcd)
-    return

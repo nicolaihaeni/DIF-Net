@@ -23,9 +23,8 @@ from dif_net import DeformedImplicitField
 if __name__ == "__main__":
     p = configargparse.ArgumentParser()
     p.add_argument("--config", type=str, default="", help="training configuration.")
-    p.add_argument(
-            "--split_file", type=str, default="", help="training subject names."
-    )
+    p.add_argument("--root_dir", type=str, default="", help="training data path.")
+    p.add_argument("--split_file", type=str, default="", help="training subject names.")
 
     p.add_argument(
         "--logging_root", type=str, default="./logs", help="root for logging"
@@ -69,9 +68,6 @@ if __name__ == "__main__":
         default="sine",
         help='Options are "sine" (all sine activations) and "mixed" (first layer sine, other layers tanh)',
     )
-    p.add_argument(
-        "--point_cloud_path", type=str, default="", help="training data path."
-    )
 
     p.add_argument("--latent_dim", type=int, default=128, help="latent code dimension.")
     p.add_argument(
@@ -98,13 +94,6 @@ if __name__ == "__main__":
         default=1e2,
         help="loss weight for minimal correction prior.",
     )
-
-    p.add_argument(
-        "--max_points",
-        type=int,
-        default=200000,
-        help="number of surface points for each epoch.",
-    )
     p.add_argument(
         "--on_surface_points",
         type=int,
@@ -114,7 +103,6 @@ if __name__ == "__main__":
 
     # load configs if exist
     opt = p.parse_args()
-
     if opt.config == "":
         meta_params = vars(opt)
     else:
@@ -122,34 +110,42 @@ if __name__ == "__main__":
             meta_params = yaml.safe_load(stream)
 
     # define dataloader
-    with open(meta_params["train_split"], "r") as file:
-        all_names = file.read().split("\n")
-
-    data_path = [
-        os.path.join(meta_params["point_cloud_path"], f + ".mat") for f in all_names
-    ]
-    sdf_dataset = dataset.PointCloudDataset(
-        root_dir=os.path.join(meta_params["point_cloud_path"],
-        split_file=meta_params['split_file'],
+    train_dataset = dataset.PointCloudSingleDataset(
+        root_dir=meta_params["root_dir"],
+        split_file=meta_params["split_file"],
+        on_surface_points=opt.on_surface_points,
         train=True,
-        **meta_params
     )
-    dataloader = DataLoader(
-        sdf_dataset,
+    val_dataset = dataset.PointCloudSingleDataset(
+        root_dir=meta_params["root_dir"],
+        split_file=meta_params["split_file"],
+        on_surface_points=opt.on_surface_points,
+    )
+    train_loader = DataLoader(
+        train_dataset,
         shuffle=True,
-        collate_fn=sdf_dataset.collate_fn,
         batch_size=meta_params["batch_size"],
         pin_memory=True,
-        num_workers=16,
+        num_workers=4,
         drop_last=True,
+        prefetch_factor=2,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        shuffle=False,
+        batch_size=meta_params["batch_size"],
+        pin_memory=True,
+        num_workers=4,
+        drop_last=False,
+        prefetch_factor=2,
     )
 
-    print("Total subjects: ", len(sdf_dataset))
+    print("Total subjects: ", len(train_dataset))
+    meta_params["num_instances"] = len(train_dataset)
 
     # define DIF-Net
     model = DeformedImplicitField(**meta_params)
-    model = nn.DataParallel(model)
-    model.cuda()
+    model = nn.DataParallel(model).cuda()
 
     # create save path
     root_path = os.path.join(
@@ -167,7 +163,8 @@ if __name__ == "__main__":
     # main training loop
     training_loop.train(
         model=model,
-        train_dataloader=dataloader,
+        train_dataloader=train_loader,
+        val_dataloader=val_loader,
         model_dir=root_path,
         mesh_dir=mesh_path,
         **meta_params
