@@ -127,10 +127,10 @@ class PointCloudSingleDataset(Dataset):
 
         # Conditional input farthest point sampling
         points = np.asarray(down_pcd.points)
-        farthest_points, _ = farthest_point_sampler(
-            torch.tensor(points).unsqueeze(0), K=1024
+        farthest_points = farthest_point_sampler(
+            pos=torch.tensor(points).unsqueeze(0), npoints=1024
         )
-        self.farthest_points = farthest_points.squeeze(0).numpy()
+        farthest_points = points[farthest_points.squeeze(0).numpy()]
 
         point_cloud_size = coords.shape[0]
         free_point_size = free_points_coords.shape[0]
