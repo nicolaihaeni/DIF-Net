@@ -131,6 +131,7 @@ class PointCloudSingleDataset(Dataset):
             pos=torch.tensor(points).unsqueeze(0), npoints=1024
         )
         farthest_points = points[farthest_points.squeeze(0).numpy()]
+        farthest_points = np.transpose(farthest_points)
 
         point_cloud_size = coords.shape[0]
         free_point_size = free_points_coords.shape[0]
@@ -157,12 +158,15 @@ class PointCloudSingleDataset(Dataset):
         coords = np.concatenate((on_surface_coords, free_points_coords), axis=0)
         normals = np.concatenate((on_surface_normals, off_surface_normals), axis=0)
 
-        return {
-            "coords": torch.from_numpy(coords).float(),
-            "farthest_points": torch.from_numpy(farthest_points).permute(1, 0).float(),
-            "sdf": torch.from_numpy(sdf).float(),
+        gt = {
             "normals": torch.from_numpy(normals).float(),
+            "sdf": torch.from_numpy(sdf).float(),
         }
+        model_inputs = {
+            "coords": torch.from_numpy(coords).float(),
+            "farthest_points": torch.from_numpy(farthest_points).float(),
+        }
+        return model_inputs, gt
 
 
 class PointCloudMultiDataset(Dataset):

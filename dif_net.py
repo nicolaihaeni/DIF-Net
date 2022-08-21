@@ -57,12 +57,12 @@ class DeformedImplicitField(nn.Module):
         )
 
     def get_hypo_net_weights(self, model_input):
-        embedding = self.encoder(model_input["farthest_coords"])
+        embedding = self.encoder(model_input["farthest_points"])
         hypo_params = self.hyper_net(embedding)
         return hypo_params, embedding
 
     def get_latent_code(self, model_input):
-        embedding, _, _ = self.encoder(model_input["farthest_coords"])
+        embedding, _, _ = self.encoder(model_input["farthest_points"])
         return embedding
 
     # for generation
@@ -102,7 +102,7 @@ class DeformedImplicitField(nn.Module):
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
         # get network weights for Deform-net using Hyper-net
-        embedding, _, _ = self.encoder(model_input["farthest_coords"])
+        embedding, _, _ = self.encoder(model_input["farthest_points"])
         hypo_params = self.hyper_net(embedding)
 
         # [deformation field, correction field]

@@ -127,7 +127,7 @@ def train(
 
                         val_loss = 0.0
                         for loss_name, loss in losses.items():
-                            single_loss = loss.mean()
+                            single_loss = loss.detach().cpu().mean()
 
                             if (
                                 loss_schedules is not None

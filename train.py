@@ -126,18 +126,17 @@ if __name__ == "__main__":
         shuffle=True,
         batch_size=meta_params["batch_size"],
         pin_memory=True,
-        num_workers=4,
+        num_workers=24,
         drop_last=True,
-        prefetch_factor=2,
+        prefetch_factor=8,
     )
     val_loader = DataLoader(
         val_dataset,
         shuffle=False,
-        batch_size=meta_params["batch_size"],
+        batch_size=2,
         pin_memory=True,
-        num_workers=4,
+        num_workers=24,
         drop_last=False,
-        prefetch_factor=2,
     )
 
     print("Total subjects: ", len(train_dataset))

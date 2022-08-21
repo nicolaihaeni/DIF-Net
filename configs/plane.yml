@@ -2,9 +2,8 @@ root_dir: /home/isleri/haeni001/data/gen_sdf
 split_file: split/plane.json
 logging_root: ./logs
 experiment_name: plane
-batch_size: 32
-epochs: 1000
-expand: 0.01
+batch_size: 64
+epochs: 2500
 hidden_num: 256
 latent_dim: 1024
 loss_correct: 100.0
