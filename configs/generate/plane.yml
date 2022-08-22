@@ -2,6 +2,6 @@ experiment_name: plane
 hidden_num: 256
 latent_dim: 1024
 model_type: sine
-point_cloud_path: datasets/plane/surface_pts_n_normal
-train_split: split/eval/plane.txt
-checkpoint_path: logs/plane/checkpoints/model_final.pth
+root_dir: /home/isleri/haeni001/data/gen_sdf
+split_file: split/plane.json
+checkpoint_path: logs/plane/checkpoints/model_epoch_1780.pth

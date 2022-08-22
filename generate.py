@@ -37,29 +37,24 @@ with open(os.path.join(opt.config), "r") as stream:
     meta_params = yaml.safe_load(stream)
 
 # define dataloader
-with open(meta_params["train_split"], "r") as file:
-    all_names = file.read().split("\n")
-
-data_path = [
-    os.path.join(meta_params["point_cloud_path"], f + ".mat") for f in all_names
-]
-
-sdf_dataset = dataset.PointCloudMulti(
-    root_dir=data_path, num_instances=100, on_surface_points=1000, **meta_params
+sdf_dataset = dataset.PointCloudSingleDataset(
+    root_dir=meta_params["root_dir"],
+    split_file=meta_params["split_file"],
+    on_surface_points=1000,
+    # train=True,
 )
 
 dataloader = DataLoader(
     sdf_dataset,
     shuffle=False,
-    collate_fn=sdf_dataset.collate_fn,
     batch_size=1,
     pin_memory=True,
     num_workers=4,
     drop_last=False,
 )
 
-print("Total subjects: ", sdf_dataset.num_instances)
-meta_params["num_instances"] = sdf_dataset.num_instances
+print("Total subjects: ", len(sdf_dataset))
+meta_params["num_instances"] = len(sdf_dataset)
 
 # define DIF-Net
 model = DeformedImplicitField(**meta_params)
@@ -84,13 +79,13 @@ for step, (model_input, gt) in enumerate(dataloader):
     # Save the input point cloud
     sdf_meshing.save_poincloud_ply(
         model_input["farthest_points"],
-        os.path.join(mesh_path, f"test_input_{step}.ply"),
+        os.path.join(mesh_path, f"{step}_input.ply"),
     )
 
     # Save the ouput mesh
     sdf_meshing.create_mesh(
         model,
-        os.path.join(mesh_path, f"test_prediction_{step}"),
+        os.path.join(mesh_path, f"{step}_prediction"),
         model_input,
         N=256,
         level=opt.level,
