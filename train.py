@@ -133,7 +133,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(
         val_dataset,
         shuffle=False,
-        batch_size=2,
+        batch_size=meta_params["batch_size"],
         pin_memory=True,
         num_workers=24,
         drop_last=False,

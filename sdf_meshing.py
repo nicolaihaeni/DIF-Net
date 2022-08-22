@@ -320,3 +320,18 @@ def convert_sdf_samples_with_color_to_ply(
             time.time() - start_time
         )
     )
+
+
+def save_poincloud_ply(points, ply_filename_out):
+    # try writing to the ply file
+    num_verts = verts.shape[0]
+
+    verts_tuple = np.zeros((num_verts,), dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")])
+    for i in range(0, num_verts):
+        verts_tuple[i] = tuple(points[i, :])
+
+    el_verts = plyfile.PlyElement.describe(verts_tuple, "vertex")
+
+    ply_data = plyfile.PlyData([el_verts])
+    logging.debug("saving point cloud to %s" % (ply_filename_out))
+    ply_data.write(ply_filename_out)
