@@ -139,20 +139,6 @@ def train(
                     val_loss = sum(val_losses) / len(val_losses)
                     writer.add_scalar("val_loss", val_loss, total_steps)
                     tqdm.write(f"Epoch {epoch} Val loss {val_loss}")
-
-                    sdf_meshing.create_mesh(
-                        model.module,
-                        os.path.join(mesh_dir, f"deformed_mesh_{total_steps}"),
-                        model_input,
-                    )
-
-                    # Then we also save the template mesh
-                    sdf_meshing.create_mesh(
-                        model.module,
-                        os.path.join(mesh_dir, f"template_mesh_{total_steps}"),
-                        model_input,
-                        template=True,
-                    )
                     model.train()
 
                 total_steps += 1

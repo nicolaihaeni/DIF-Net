@@ -83,7 +83,7 @@ for step, (model_input, gt) in enumerate(dataloader):
 
     # Save the input point cloud
     sdf_meshing.save_poincloud_ply(
-        model_input["farthest_coords"],
+        model_input["farthest_points"],
         os.path.join(mesh_path, f"test_input_{step}.ply"),
     )
 
@@ -95,7 +95,7 @@ for step, (model_input, gt) in enumerate(dataloader):
         N=256,
         level=opt.level,
     )
-    if step >= 1:
+    if step >= 10:
         break
 
 # Save the template with varying thresholds
