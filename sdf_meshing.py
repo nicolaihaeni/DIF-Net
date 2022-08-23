@@ -15,16 +15,16 @@ from collections import OrderedDict
 
 def create_mesh(
     model,
+    embedding
     filename,
-    model_input,
-    embedding=None,
+    subject_idx=0,
     N=128,
     max_batch=64**3,
     offset=None,
     scale=None,
     level=0.0,
-    get_color=False,
-    template=False,
+    get_color=True,
+    template=False
 ):
     start = time.time()
     ply_filename = filename
@@ -33,7 +33,7 @@ def create_mesh(
 
     # NOTE: the voxel_origin is actually the (bottom, left, down) corner, not the middle
     voxel_origin = [-1, -1, -1]
-    voxel_size = 2.4 / (N - 1)
+    voxel_size = 2.0 / (N - 1)
 
     overall_index = torch.arange(0, N**3, 1, out=torch.LongTensor())
     samples = torch.zeros(N**3, 4)
@@ -41,8 +41,8 @@ def create_mesh(
     # transform first 3 columns
     # to be the x, y, z index
     samples[:, 2] = overall_index % N
-    samples[:, 1] = (overall_index.long() // N) % N
-    samples[:, 0] = ((overall_index.long() // N) // N) % N
+    samples[:, 1] = (overall_index.long() / N) % N
+    samples[:, 0] = ((overall_index.long() / N) / N) % N
 
     # transform first 3 columns
     # to be the x, y, z coordinate
@@ -53,9 +53,6 @@ def create_mesh(
     num_samples = N**3
 
     samples.requires_grad = False
-    if embedding is None:
-        embedding = model.get_latent_code(model_input)
-        embedding = embedding[0].unsqueeze(0)
 
     head = 0
     while head < num_samples:
@@ -70,6 +67,7 @@ def create_mesh(
                 .detach()
                 .cpu()
             )
+
         else:
             samples[head : min(head + max_batch, num_samples), 3] = (
                 model.inference(sample_subset, embedding)
