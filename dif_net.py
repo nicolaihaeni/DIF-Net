@@ -9,13 +9,13 @@ from torch import nn
 import modules
 from meta_modules import HyperNetwork
 from loss import *
-from pointnet import PointNetEncoder
 
 
 class DeformedImplicitField(nn.Module):
     def __init__(
         self,
-        latent_dim=1024,
+        num_instances,
+        latent_dim=128,
         model_type="sine",
         hyper_hidden_layers=1,
         hyper_hidden_features=256,
@@ -23,9 +23,13 @@ class DeformedImplicitField(nn.Module):
         **kwargs
     ):
         super().__init__()
+        # 　We use auto-decoder framework following Park et al. 2019 (DeepSDF),
+        # therefore, the model consists of latent codes for each subjects and DIF-Net decoder.
+
         # latent code embedding for training subjects
         self.latent_dim = latent_dim
-        self.encoder = PointNetEncoder()
+        self.latent_codes = nn.Embedding(num_instances, self.latent_dim)
+        nn.init.normal_(self.latent_codes.weight, mean=0, std=0.01)
 
         ## DIF-Net
         # template field
@@ -55,14 +59,16 @@ class DeformedImplicitField(nn.Module):
             hyper_hidden_features=hyper_hidden_features,
             hypo_module=self.deform_net,
         )
+        print(self)
 
     def get_hypo_net_weights(self, model_input):
-        embedding = self.encoder(model_input["farthest_points"])
+        instance_idx = model_input["instance_idx"]
+        embedding = self.latent_codes(instance_idx)
         hypo_params = self.hyper_net(embedding)
         return hypo_params, embedding
 
-    def get_latent_code(self, model_input):
-        embedding, _, _ = self.encoder(model_input["farthest_points"])
+    def get_latent_code(self, instance_idx):
+        embedding = self.latent_codes(instance_idx)
         return embedding
 
     # for generation
@@ -77,7 +83,6 @@ class DeformedImplicitField(nn.Module):
             new_coords = coords + deformation
             model_input_temp = {"coords": new_coords}
             model_output_temp = self.template_field(model_input_temp)
-
             return model_output_temp["model_out"] + correction
 
     def get_template_coords(self, coords, embedding):
@@ -99,16 +104,19 @@ class DeformedImplicitField(nn.Module):
 
     # for training
     def forward(self, model_input, gt, **kwargs):
+        instance_idx = model_input["instance_idx"]
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
         # get network weights for Deform-net using Hyper-net
-        embedding, _, _ = self.encoder(model_input["farthest_points"])
+        embedding = self.latent_codes(instance_idx)
         hypo_params = self.hyper_net(embedding)
 
         # [deformation field, correction field]
         model_output = self.deform_net(model_input, params=hypo_params)
-        # 3 dimensional deformation field
-        deformation = model_output["model_out"][:, :, :3]
+
+        deformation = model_output["model_out"][
+            :, :, :3
+        ]  # 3 dimensional deformation field
         correction = model_output["model_out"][:, :, 3:]  # scalar correction field
         new_coords = coords + deformation  # deform into template space
 
@@ -133,6 +141,7 @@ class DeformedImplicitField(nn.Module):
         )  # gradient of deformation wrt. input position
 
         model_input_temp = {"coords": new_coords}
+
         model_output_temp = self.template_field(model_input_temp)
 
         sdf = model_output_temp["model_out"]  # SDF value in template space
@@ -155,7 +164,7 @@ class DeformedImplicitField(nn.Module):
             "grad_temp": grad_temp,
             "grad_deform": grad_deform,
             "model_out": sdf_final,
-            # "latent_vec": embedding,
+            "latent_vec": embedding,
             "hypo_params": hypo_params,
             "grad_sdf": grad_sdf,
             "sdf_correct": correction,
@@ -172,6 +181,7 @@ class DeformedImplicitField(nn.Module):
 
     # for evaluation
     def embedding(self, embed, model_input, gt):
+
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
         # get network weights for Deform-net using Hyper-net

@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 import configargparse
 from torch import nn
 from dif_net import DeformedImplicitField
+from pointnet import PointNetEncoder
 
 if __name__ == "__main__":
     p = configargparse.ArgumentParser()
@@ -110,13 +111,13 @@ if __name__ == "__main__":
             meta_params = yaml.safe_load(stream)
 
     # define dataloader
-    train_dataset = dataset.PointCloudSingleDataset(
+    train_dataset = dataset.PointCloudMultiDataset(
         root_dir=meta_params["root_dir"],
         split_file=meta_params["split_file"],
         on_surface_points=opt.on_surface_points,
         train=True,
     )
-    val_dataset = dataset.PointCloudSingleDataset(
+    val_dataset = dataset.PointCloudMultiDataset(
         root_dir=meta_params["root_dir"],
         split_file=meta_params["split_file"],
         on_surface_points=opt.on_surface_points,
@@ -129,6 +130,7 @@ if __name__ == "__main__":
         num_workers=24,
         drop_last=True,
         prefetch_factor=8,
+        collate_fn=train_dataset.collate_fn,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -137,14 +139,11 @@ if __name__ == "__main__":
         pin_memory=True,
         num_workers=24,
         drop_last=False,
+        collate_fn=val_dataset.collate_fn,
     )
 
     print("Total subjects: ", len(train_dataset))
     meta_params["num_instances"] = len(train_dataset)
-
-    # define DIF-Net
-    model = DeformedImplicitField(**meta_params)
-    model = nn.DataParallel(model).cuda()
 
     # create save path
     root_path = os.path.join(
@@ -159,12 +158,44 @@ if __name__ == "__main__":
     with io.open(os.path.join(root_path, "model.yml"), "w", encoding="utf8") as outfile:
         yaml.dump(meta_params, outfile, default_flow_style=False, allow_unicode=True)
 
-    # main training loop
+    # define DIF-Net
+    model = DeformedImplicitField(**meta_params)
+    model = nn.DataParallel(model).cuda()
+
+    optim = torch.optim.Adam(lr=meta_params["lr"], params=model.parameters())
+
+    # Check if model should be resumed
+    start, model, optim = utils.load_checkpoints(meta_params, model, optim)
+
+    # main decoder training loop
     training_loop.train(
         model=model,
+        optim=optim,
+        start_epoch=start,
         train_dataloader=train_loader,
         val_dataloader=val_loader,
         model_dir=root_path,
-        mesh_dir=mesh_path,
+        **meta_params
+    )
+
+    # After the encoder is trained, train the encoder
+    encoder = PointNetEncoder()
+    encoder = nn.DataParallel(encoder).cuda()
+
+    optim = torch.optim.Adam(lr=meta_params["lr"], params=encoder.parameters())
+
+    # Check if model should be resumed
+    start, model, optim = utils.load_checkpoints(
+        meta_params, encoder, optim, name="encoder"
+    )
+    # main encoder training loop
+    training_loop.train_encoder(
+        encoder=encoder,
+        model=model,
+        optim=optim,
+        start_epoch=start,
+        train_dataloader=train_loader,
+        val_dataloader=val_loader,
+        model_dir=root_path,
         **meta_params
     )
