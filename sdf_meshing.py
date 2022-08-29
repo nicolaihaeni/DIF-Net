@@ -15,16 +15,15 @@ from collections import OrderedDict
 
 def create_mesh(
     model,
-    embedding
     filename,
-    subject_idx=0,
+    embedding=None,
     N=128,
     max_batch=64**3,
     offset=None,
     scale=None,
     level=0.0,
-    get_color=True,
-    template=False
+    get_color=False,
+    template=False,
 ):
     start = time.time()
     ply_filename = filename
@@ -254,7 +253,7 @@ def convert_sdf_samples_with_color_to_ply(
         np.zeros(0),
     )
     try:
-        verts, faces, normals, values = skimage.measure.marching_cubes_lewiner(
+        verts, faces, normals, values = skimage.measure.marching_cubes(
             numpy_3d_sdf_tensor, level=level, spacing=[voxel_size] * 3
         )
     except:

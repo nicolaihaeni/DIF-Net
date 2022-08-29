@@ -16,12 +16,15 @@ from dgl.geometry import farthest_point_sampler
 
 
 class PointCloudDataset(Dataset):
-    def __init__(self, point_cloud_path, on_surface_points, instance_idx):
+    def __init__(
+        self, point_cloud_path, on_surface_points, instance_idx, max_points=200000
+    ):
         super().__init__()
 
         self.instance_idx = instance_idx
         self.on_surface_points = on_surface_points
         self.point_cloud_path = point_cloud_path
+        self.max_points = max_points
 
         print(f"Loading data of subject {self.instance_idx}")
         with h5py.File(point_cloud_path, "r") as hf:
@@ -43,9 +46,11 @@ class PointCloudDataset(Dataset):
         farthest_points = farthest_point_sampler(
             pos=torch.tensor(points).unsqueeze(0), npoints=1024
         )
-        self.farthest_points = points[farthest_points.squeeze(0).numpy()]
+        self.farthest_points = np.transpose(points[farthest_points.squeeze(0).numpy()])
 
     def __len__(self):
+        if self.max_points != -1:
+            return self.max_points // self.on_surface_points
         return self.coords.shape[0] // self.on_surface_points
 
     def __getitem__(self, idx):
@@ -84,7 +89,9 @@ class PointCloudDataset(Dataset):
 
 
 class PointCloudMultiDataset(Dataset):
-    def __init__(self, root_dir, split_file, on_surface_points, train=False):
+    def __init__(
+        self, root_dir, split_file, on_surface_points, max_points=-1, train=False
+    ):
         self.on_surface_points = on_surface_points
         self.root_dir = root_dir
         print(root_dir)
@@ -110,6 +117,7 @@ class PointCloudMultiDataset(Dataset):
             PointCloudDataset(
                 point_cloud_path=dir,
                 on_surface_points=on_surface_points,
+                max_points=max_points,
                 instance_idx=idx,
             )
             for idx, dir in enumerate(self.instances)

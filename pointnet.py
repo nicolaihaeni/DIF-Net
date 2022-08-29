@@ -151,7 +151,7 @@ class PointNetEncoder(nn.Module):
         if self.global_feat:
             return x, trans, trans_feat
         else:
-            x = x.view(-1, out_dim, 1).repeat(1, 1, N)
+            x = x.view(-1, self.out_dim, 1).repeat(1, 1, N)
             return torch.cat([x, pointfeat], 1), trans, trans_feat
 
 

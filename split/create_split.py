@@ -1,9 +1,9 @@
 import os
 import json
 
-category = "02691156"
-train_file = "/home/isleri/haeni001/code/DIF-Net/split/train/plane.txt"
-val_file = "/home/isleri/haeni001/code/DIF-Net/split/eval/plane.txt"
+category = "04379243"
+train_file = "/home/isleri/haeni001/code/DIF-Net/split/train/table.txt"
+val_file = "/home/isleri/haeni001/code/DIF-Net/split/eval/table.txt"
 
 test_lines = []
 with open(val_file, "r") as f:
@@ -16,8 +16,8 @@ with open(train_file, "r") as f:
         train_lines.append(line.rstrip())
 
 data = {}
-data["test"] = {"02691156": test_lines}
-data["train"] = {"02691156": train_lines}
+data["test"] = {category: test_lines}
+data["train"] = {category: train_lines}
 
-with open("plane.json", "w") as outfile:
+with open("table.json", "w") as outfile:
     json.dump(data, outfile)

@@ -49,10 +49,11 @@ def train(
 
     writer = SummaryWriter(summaries_dir)
 
-    total_steps = 0
+    total_steps = start_epoch * len(train_dataloader)
     print("Start training the decoder...")
     with tqdm(total=len(train_dataloader) * epochs) as pbar:
         train_losses = []
+        pbar.update(total_steps)
         for epoch in range(start_epoch, epochs):
             for step, (model_input, gt) in enumerate(train_dataloader):
                 start_time = time.time()
@@ -113,7 +114,7 @@ def train(
             os.path.join(checkpoints_dir, "decoder_final.tar"),
             model,
             optim,
-            epoch,
+            epochs,
         )
 
     np.savetxt(
@@ -163,18 +164,19 @@ def train_encoder(
     model.eval()
     encoder.train()
 
-    total_steps = 0
+    total_steps = start_epoch * len(train_dataloader)
     print("Start training the encoder...")
     with tqdm(total=len(train_dataloader) * epochs) as pbar:
         train_losses = []
+        pbar.update(total_steps)
         for epoch in range(start_epoch, epochs):
             for step, (model_input, gt) in enumerate(train_dataloader):
                 start_time = time.time()
 
                 points = model_input["farthest_points"].cuda()
-                embedding = encoder(points)
+                embedding, _, _ = encoder(points)
 
-                gt_embedding = model.get_latent_code(model_input["instance_idx"])
+                gt_embedding = model.get_latent_code(model_input["instance_idx"].cuda())
                 loss = F.mse_loss(embedding, gt_embedding)
 
                 optim.zero_grad()
@@ -209,9 +211,9 @@ def train_encoder(
 
         utils.save_checkpoints(
             os.path.join(checkpoints_dir, "encoder_final.tar"),
-            model,
+            encoder,
             optim,
-            epoch,
+            epochs,
         )
 
     np.savetxt(

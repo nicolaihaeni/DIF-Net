@@ -142,8 +142,8 @@ if __name__ == "__main__":
         collate_fn=val_dataset.collate_fn,
     )
 
-    print("Total subjects: ", len(train_dataset))
-    meta_params["num_instances"] = len(train_dataset)
+    print("Total subjects: ", train_dataset.num_instances)
+    meta_params["num_instances"] = train_dataset.num_instances
 
     # create save path
     root_path = os.path.join(
@@ -179,19 +179,19 @@ if __name__ == "__main__":
     )
 
     # After the encoder is trained, train the encoder
-    encoder = PointNetEncoder()
+    encoder = PointNetEncoder(out_dim=meta_params["latent_dim"])
     encoder = nn.DataParallel(encoder).cuda()
 
     optim = torch.optim.Adam(lr=meta_params["lr"], params=encoder.parameters())
 
     # Check if model should be resumed
-    start, model, optim = utils.load_checkpoints(
+    start, encoder, optim = utils.load_checkpoints(
         meta_params, encoder, optim, name="encoder"
     )
     # main encoder training loop
     training_loop.train_encoder(
         encoder=encoder,
-        model=model,
+        model=model.module,
         optim=optim,
         start_epoch=start,
         train_dataloader=train_loader,

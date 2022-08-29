@@ -4,4 +4,5 @@ latent_dim: 1024
 model_type: sine
 root_dir: /home/isleri/haeni001/data/gen_sdf
 split_file: split/plane.json
-checkpoint_path: logs/plane/checkpoints/model_epoch_1780.pth
+checkpoint_path: logs/plane/checkpoints/decoder_final.tar
+encoder_checkpoint_path: logs/plane/checkpoints/encoder_final.tar

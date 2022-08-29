@@ -37,7 +37,13 @@ def load_checkpoints(args, model, optimizer=None, name="decoder"):
     start = 0
 
     # Load checkpoints
-    experiment_path = os.path.join(args["logging_root"], args["experiment_name"])
+    experiment_path = os.path.join(
+        args["logging_root"], args["experiment_name"], "checkpoints"
+    )
+
+    if not os.path.exists(experiment_path):
+        return start, model, optimizer
+
     ckpts = [
         os.path.join(experiment_path, f)
         for f in sorted(os.listdir(experiment_path))
