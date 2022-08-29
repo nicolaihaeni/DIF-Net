@@ -17,7 +17,12 @@ from dgl.geometry import farthest_point_sampler
 
 class PointCloudDataset(Dataset):
     def __init__(
-        self, point_cloud_path, on_surface_points, instance_idx, max_points=200000
+        self,
+        point_cloud_path,
+        on_surface_points,
+        instance_idx=None,
+        expand=-1,
+        max_points=200000,
     ):
         super().__init__()
 
@@ -25,6 +30,7 @@ class PointCloudDataset(Dataset):
         self.on_surface_points = on_surface_points
         self.point_cloud_path = point_cloud_path
         self.max_points = max_points
+        self.expand = expand
 
         print(f"Loading data of subject {self.instance_idx}")
         with h5py.File(point_cloud_path, "r") as hf:
@@ -66,17 +72,37 @@ class PointCloudDataset(Dataset):
         on_surface_coords = self.coords[rand_idcs, :]
         on_surface_normals = self.normals[rand_idcs, :]
 
-        free_rand_idcs = np.random.choice(free_point_size, size=off_surface_samples)
+        if self.expand != -1:
+            on_surface_coords += (
+                on_surface_normals * self.expand
+            )  # expand the shape surface if its structure is too thin
+
+        off_surface_coords = np.random.uniform(
+            -1, 1, size=(off_surface_samples // 2, 3)
+        )
+        free_rand_idcs = np.random.choice(
+            free_point_size, size=off_surface_samples // 2
+        )
         free_points_coords = self.free_points_coords[free_rand_idcs, :]
+
         off_surface_normals = np.ones((off_surface_samples, 3)) * -1
 
         sdf = np.zeros((total_samples, 1))  # on-surface = 0
         sdf[self.on_surface_points :, :] = -1  # off-surface = -1
 
         # if a free space point has gt SDF value, replace -1 with it.
-        sdf[self.on_surface_points :, :] = self.free_points_sdf[free_rand_idcs][:, None]
+        if self.expand != -1:
+            sdf[self.on_surface_points + off_surface_samples // 2 :, :] = (
+                self.free_points_sdf[free_rand_idcs][:, None] - self.expand
+            )
+        else:
+            sdf[
+                self.on_surface_points + off_surface_samples // 2 :, :
+            ] = self.free_points_sdf[free_rand_idcs][:, None]
 
-        coords = np.concatenate((on_surface_coords, free_points_coords), axis=0)
+        coords = np.concatenate(
+            (on_surface_coords, off_surface_coords, free_points_coords), axis=0
+        )
         normals = np.concatenate((on_surface_normals, off_surface_normals), axis=0)
 
         return {
@@ -90,7 +116,13 @@ class PointCloudDataset(Dataset):
 
 class PointCloudMultiDataset(Dataset):
     def __init__(
-        self, root_dir, split_file, on_surface_points, max_points=-1, train=False
+        self,
+        root_dir,
+        split_file,
+        on_surface_points,
+        max_points=-1,
+        expand=-1,
+        train=False,
     ):
         self.on_surface_points = on_surface_points
         self.root_dir = root_dir
@@ -119,6 +151,7 @@ class PointCloudMultiDataset(Dataset):
                 on_surface_points=on_surface_points,
                 max_points=max_points,
                 instance_idx=idx,
+                expand=expand,
             )
             for idx, dir in enumerate(self.instances)
         ]

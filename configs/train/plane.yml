@@ -2,8 +2,9 @@ root_dir: /home/isleri/haeni001/data/gen_sdf
 split_file: split/plane.json
 logging_root: ./logs
 experiment_name: plane
-batch_size: 64
+batch_size: 128
 epochs: 60
+expand: 0.01
 hidden_num: 256
 latent_dim: 1024
 loss_correct: 100.0
@@ -11,6 +12,7 @@ loss_grad_deform: 2
 loss_grad_temp: 100.0
 lr: 0.0001
 model_type: sine
+max_points: 200000
 on_surface_points: 4000
 epochs_til_checkpoint: 10
 steps_til_summary: 100

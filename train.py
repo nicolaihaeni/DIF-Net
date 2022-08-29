@@ -95,6 +95,16 @@ if __name__ == "__main__":
         default=1e2,
         help="loss weight for minimal correction prior.",
     )
+
+    p.add_argument(
+        "--expand", type=float, default=-1, help="expansion of shape surface."
+    )
+    p.add_argument(
+        "--max_points",
+        type=int,
+        default=200000,
+        help="number of surface points for each epoch.",
+    )
     p.add_argument(
         "--on_surface_points",
         type=int,
@@ -115,11 +125,15 @@ if __name__ == "__main__":
         root_dir=meta_params["root_dir"],
         split_file=meta_params["split_file"],
         on_surface_points=opt.on_surface_points,
+        max_points=meta_params["max_points"],
+        expand=meta_params["expand"],
         train=True,
     )
     val_dataset = dataset.PointCloudMultiDataset(
         root_dir=meta_params["root_dir"],
         split_file=meta_params["split_file"],
+        max_points=meta_params["max_points"],
+        expand=meta_params["expand"],
         on_surface_points=opt.on_surface_points,
     )
     train_loader = DataLoader(
@@ -178,24 +192,24 @@ if __name__ == "__main__":
         **meta_params
     )
 
-    # After the encoder is trained, train the encoder
-    encoder = PointNetEncoder(out_dim=meta_params["latent_dim"])
-    encoder = nn.DataParallel(encoder).cuda()
+    # # After the encoder is trained, train the encoder
+    # encoder = PointNetEncoder(out_dim=meta_params["latent_dim"])
+    # encoder = nn.DataParallel(encoder).cuda()
 
-    optim = torch.optim.Adam(lr=meta_params["lr"], params=encoder.parameters())
+    # optim = torch.optim.Adam(lr=meta_params["lr"], params=encoder.parameters())
 
-    # Check if model should be resumed
-    start, encoder, optim = utils.load_checkpoints(
-        meta_params, encoder, optim, name="encoder"
-    )
-    # main encoder training loop
-    training_loop.train_encoder(
-        encoder=encoder,
-        model=model.module,
-        optim=optim,
-        start_epoch=start,
-        train_dataloader=train_loader,
-        val_dataloader=val_loader,
-        model_dir=root_path,
-        **meta_params
-    )
+    # # Check if model should be resumed
+    # start, encoder, optim = utils.load_checkpoints(
+    # meta_params, encoder, optim, name="encoder"
+    # )
+    # # main encoder training loop
+    # training_loop.train_encoder(
+    # encoder=encoder,
+    # model=model.module,
+    # optim=optim,
+    # start_epoch=start,
+    # train_dataloader=train_loader,
+    # val_dataloader=val_loader,
+    # model_dir=root_path,
+    # **meta_params
+    # )
