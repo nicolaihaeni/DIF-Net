@@ -103,12 +103,13 @@ class DeformedImplicitField(nn.Module):
             return model_output["model_out"]
 
     # for training
-    def forward(self, model_input, gt, **kwargs):
+    def forward(self, model_input, gt, embedding=None, **kwargs):
         instance_idx = model_input["instance_idx"]
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
-        # get network weights for Deform-net using Hyper-net
-        embedding = self.latent_codes(instance_idx)
+        if embedding is None:
+            # get network weights for Deform-net using Hyper-net
+            embedding = self.latent_codes(instance_idx)
         hypo_params = self.hyper_net(embedding)
 
         # [deformation field, correction field]

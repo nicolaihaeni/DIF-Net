@@ -1,4 +1,4 @@
-# Copyright (c) Microsoft Corporation.
+#  Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
 """Training losses for DIF-Net.
@@ -11,13 +11,14 @@ import torch.nn.functional as F
 def deform_implicit_loss(
     model_output, gt, loss_grad_deform=5, loss_grad_temp=1e2, loss_correct=1e2
 ):
+
     gt_sdf = gt["sdf"]
     gt_normals = gt["normals"]
 
     coords = model_output["model_in"]
     pred_sdf = model_output["model_out"]
 
-    # embeddings = model_output["latent_vec"]
+    embeddings = model_output["latent_vec"]
 
     gradient_sdf = model_output["grad_sdf"]
     gradient_deform = model_output["grad_deform"]
@@ -53,8 +54,8 @@ def deform_implicit_loss(
     # minimal correction prior
     sdf_correct_constraint = torch.abs(sdf_correct)
 
-    # # latent code prior
-    # embeddings_constraint = torch.mean(embeddings**2)
+    # latent code prior
+    embeddings_constraint = torch.mean(embeddings**2)
 
     # -----------------
     return {
@@ -62,7 +63,7 @@ def deform_implicit_loss(
         "inter": inter_constraint.mean() * 5e2,
         "normal_constraint": normal_constraint.mean() * 1e2,
         "grad_constraint": grad_constraint.mean() * 5e1,
-        # "embeddings_constraint": embeddings_constraint.mean() * 1e6,
+        "embeddings_constraint": embeddings_constraint.mean() * 1e6,
         "grad_temp_constraint": grad_temp_constraint.mean() * loss_grad_temp,
         "grad_deform_constraint": grad_deform_constraint.mean() * loss_grad_deform,
         "sdf_correct_constraint": sdf_correct_constraint.mean() * loss_correct,
@@ -70,6 +71,7 @@ def deform_implicit_loss(
 
 
 def embedding_loss(model_output, gt):
+
     gt_sdf = gt["sdf"]
     gt_normals = gt["normals"]
 
@@ -95,10 +97,13 @@ def embedding_loss(model_output, gt):
     )
     grad_constraint = torch.abs(gradient_sdf.norm(dim=-1) - 1)
 
+    embeddings_constraint = torch.mean(embeddings**2)
+
     # -----------------
     return {
         "sdf": torch.abs(sdf_constraint).mean() * 3e3,
         "inter": inter_constraint.mean() * 5e2,
         "normal_constraint": normal_constraint.mean() * 1e2,
         "grad_constraint": grad_constraint.mean() * 5e1,
+        "embeddings_constraint": embeddings_constraint.mean() * 1e6,
     }
