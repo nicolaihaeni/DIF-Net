@@ -171,27 +171,36 @@ def train_encoder(
         pbar.update(total_steps)
         for epoch in range(start_epoch, epochs):
             for step, (model_input, gt) in enumerate(train_dataloader):
-                start_time = time.time()
-
                 points = model_input["farthest_points"].cuda()
                 embedding, _, _ = encoder(points)
 
-                gt_embedding = model.get_latent_code(model_input["instance_idx"].cuda())
-                loss = F.mse_loss(embedding, gt_embedding)
+                losses = model.module.embedding(
+                    embedding, encoder.z_mu, encoder.z_var, model_input, gt
+                )
+
+                train_loss = 0.0
+                for loss_name, loss in losses.items():
+                    single_loss = loss.mean()
+
+                    if loss_schedules is not None and loss_name in loss_schedules:
+                        writer.add_scalar(
+                            loss_name + "_weight",
+                            loss_schedules[loss_name](total_steps),
+                            total_steps,
+                        )
+                        single_loss *= loss_schedules[loss_name](total_steps)
+
+                    writer.add_scalar(loss_name, single_loss, total_steps)
+                    train_loss += single_loss
+
+                train_losses.append(train_loss.item())
+                writer.add_scalar("total_train_loss", train_loss, total_steps)
 
                 optim.zero_grad()
-                loss.backward()
+                train_loss.backward()
                 optim.step()
 
-                writer.add_scalar("loss", loss, total_steps)
                 pbar.update(1)
-
-                if not total_steps % steps_til_summary:
-                    tqdm.write(
-                        "Epoch %d, Total loss %0.6f, iteration time %0.6f"
-                        % (epoch, loss, time.time() - start_time)
-                    )
-
                 total_steps += 1
 
             if not epoch % epochs_til_checkpoint and epoch:

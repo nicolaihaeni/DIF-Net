@@ -19,7 +19,8 @@ from torch.utils.data import DataLoader
 import configargparse
 from torch import nn
 from dif_net import DeformedImplicitField
-from pointnet import PointNetEncoder
+from pointnet import Encoder
+
 
 if __name__ == "__main__":
     p = configargparse.ArgumentParser()
@@ -192,24 +193,24 @@ if __name__ == "__main__":
         **meta_params
     )
 
-    # # After the encoder is trained, train the encoder
-    # encoder = PointNetEncoder(out_dim=meta_params["latent_dim"])
-    # encoder = nn.DataParallel(encoder).cuda()
+    # After the encoder is trained, train the encoder
+    encoder = Encoder(latent_dim=meta_params["latent_dim"], train=True)
+    encoder = nn.DataParallel(encoder).cuda()
 
-    # optim = torch.optim.Adam(lr=meta_params["lr"], params=encoder.parameters())
+    optim = torch.optim.Adam(lr=meta_params["lr"], params=encoder.parameters())
 
-    # # Check if model should be resumed
-    # start, encoder, optim = utils.load_checkpoints(
-    # meta_params, encoder, optim, name="encoder"
-    # )
-    # # main encoder training loop
-    # training_loop.train_encoder(
-    # encoder=encoder,
-    # model=model.module,
-    # optim=optim,
-    # start_epoch=start,
-    # train_dataloader=train_loader,
-    # val_dataloader=val_loader,
-    # model_dir=root_path,
-    # **meta_params
-    # )
+    # Check if model should be resumed
+    start, encoder, optim = utils.load_checkpoints(
+        meta_params, encoder, optim, name="encoder"
+    )
+    # main encoder training loop
+    training_loop.train_encoder(
+        encoder=encoder,
+        model=model,
+        optim=optim,
+        start_epoch=start,
+        train_dataloader=train_loader,
+        val_dataloader=val_loader,
+        model_dir=root_path,
+        **meta_params
+    )

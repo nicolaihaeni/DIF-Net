@@ -52,7 +52,7 @@ class PointCloudDataset(Dataset):
         farthest_points = farthest_point_sampler(
             pos=torch.tensor(points).unsqueeze(0), npoints=1024
         )
-        self.farthest_points = np.transpose(points[farthest_points.squeeze(0).numpy()])
+        self.farthest_points = points[farthest_points.squeeze(0).numpy()]
 
     def __len__(self):
         if self.max_points != -1:

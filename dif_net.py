@@ -8,6 +8,7 @@ import torch
 from torch import nn
 import modules
 from meta_modules import HyperNetwork
+from pointnet import Encoder
 from loss import *
 
 
@@ -20,11 +21,13 @@ class DeformedImplicitField(nn.Module):
         hyper_hidden_layers=1,
         hyper_hidden_features=256,
         hidden_num=128,
-        **kwargs
+        train=True,
+        **kwargs,
     ):
         super().__init__()
-        # 　We use auto-decoder framework following Park et al. 2019 (DeepSDF),
-        # therefore, the model consists of latent codes for each subjects and DIF-Net decoder.
+        # self.train = train
+        # self.latent_dim = latent_dim
+        # self.encoder = Encoder(latent_dim)
 
         # latent code embedding for training subjects
         self.latent_dim = latent_dim
@@ -71,6 +74,17 @@ class DeformedImplicitField(nn.Module):
         embedding = self.latent_codes(instance_idx)
         return embedding
 
+    # def get_latent_code(self, points):
+    # latent = self.encoder(points)
+    # if self.train:
+    # self.z_mu = latent[..., : self.latent_dim]
+    # self.z_var = latent[..., self.latent_dim :]
+    # std = torch.exp(self.z_var / 2)
+    # eps = torch.randn_like(std)
+    # latent = eps.mul(std).add_(self.z_mu)
+    # embedding = latent[..., : self.latent_dim]
+    # return embedding
+
     # for generation
     def inference(self, coords, embedding):
         with torch.no_grad():
@@ -107,9 +121,9 @@ class DeformedImplicitField(nn.Module):
         instance_idx = model_input["instance_idx"]
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
-        if embedding is None:
-            # get network weights for Deform-net using Hyper-net
-            embedding = self.latent_codes(instance_idx)
+        embedding = self.get_latent_code(instance_idx)
+
+        # get network weights for Deform-net using Hyper-net
         hypo_params = self.hyper_net(embedding)
 
         # [deformation field, correction field]
@@ -169,6 +183,8 @@ class DeformedImplicitField(nn.Module):
             "hypo_params": hypo_params,
             "grad_sdf": grad_sdf,
             "sdf_correct": correction,
+            # "z_mu": self.z_mu,
+            # "z_var": self.z_var,
         }
         losses = deform_implicit_loss(
             model_out,
@@ -181,9 +197,10 @@ class DeformedImplicitField(nn.Module):
         return losses
 
     # for evaluation
-    def embedding(self, embed, model_input, gt):
-
+    def embedding(self, embed, mu, var, model_input, gt):
+        instance_idx = model_input["instance_idx"]
         coords = model_input["coords"]  # 3 dimensional input coordinates
+        embedding = self.get_latent_code(instance_idx)
 
         # get network weights for Deform-net using Hyper-net
         hypo_params = self.hyper_net(embed)
@@ -211,12 +228,14 @@ class DeformedImplicitField(nn.Module):
             0
         ]  # normal direction in original shape space
 
+        gt["embedding"] = embedding
         model_out = {
             "model_in": model_output["model_in"],
             "model_out": sdf_final,
             "latent_vec": embed,
             "grad_sdf": grad_sdf,
+            "z_mu": mu,
+            "z_var": var,
         }
         losses = embedding_loss(model_out, gt)
-
         return losses

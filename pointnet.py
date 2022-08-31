@@ -1,166 +1,211 @@
 import torch
-import torch.nn as nn
-import torch.nn.parallel
-import torch.utils.data
-from torch.autograd import Variable
-import numpy as np
-import torch.nn.functional as F
+from torch import nn
+from torch.nn import functional as F
 
 
-import torch
-import torch.nn as nn
-import torch.nn.parallel
-import torch.utils.data
-from torch.autograd import Variable
-import numpy as np
-import torch.nn.functional as F
-
-
-class STN3d(nn.Module):
-    def __init__(self, channel):
-        super(STN3d, self).__init__()
-        self.conv1 = torch.nn.Conv1d(channel, 64, 1)
-        self.conv2 = torch.nn.Conv1d(64, 128, 1)
-        self.conv3 = torch.nn.Conv1d(128, 1024, 1)
-        self.fc1 = nn.Linear(1024, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 9)
-        self.relu = nn.ReLU()
-
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1024)
-        self.bn4 = nn.BatchNorm1d(512)
-        self.bn5 = nn.BatchNorm1d(256)
+class Encoder(nn.Module):
+    def __init__(self, latent_dim, desc_size=512, train=False):
+        nn.Module.__init__(self)
+        self.train = train
+        self.latent_dim = latent_dim
+        self.ptnet = SimplePointNet(
+            latent_dim * 2, desc_size, [32, 128, 256], [512, 256, 128], [0]
+        )
 
     def forward(self, x):
-        batchsize = x.size()[0]
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = torch.max(x, 2, keepdim=True)[0]
-        x = x.view(-1, 1024)
-
-        x = F.relu(self.bn4(self.fc1(x)))
-        x = F.relu(self.bn5(self.fc2(x)))
-        x = self.fc3(x)
-
-        iden = (
-            Variable(
-                torch.from_numpy(
-                    np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]).astype(np.float32)
-                )
-            )
-            .view(1, 9)
-            .repeat(batchsize, 1)
-        )
-        if x.is_cuda:
-            iden = iden.cuda()
-        x = x + iden
-        x = x.view(-1, 3, 3)
-        return x
+        latent = self.ptnet(x)
+        if self.train:
+            self.z_mu = latent[..., : self.latent_dim]
+            self.z_var = latent[..., self.latent_dim :]
+            std = torch.exp(self.z_var / 2)
+            eps = torch.randn_like(std)
+            latent = eps.mul(std).add_(self.z_mu)
+        embedding = latent[..., : self.latent_dim]
+        return embedding
 
 
-class STNkd(nn.Module):
-    def __init__(self, k=64):
-        super(STNkd, self).__init__()
-        self.conv1 = torch.nn.Conv1d(k, 64, 1)
-        self.conv2 = torch.nn.Conv1d(64, 128, 1)
-        self.conv3 = torch.nn.Conv1d(128, 1024, 1)
-        self.fc1 = nn.Linear(1024, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, k * k)
-        self.relu = nn.ReLU()
+class SimplePointNet(nn.Module):
+    """
+    Simplified PointNet, without embedding transformer matrices.
+    Akin to the method in Achlioptas et al, Learning Representations and
+    Generative Models for 3D Point Clouds.
+    E.g.
+    s = SimplePointNet(100, 200, (25,50,100), (150,120))
+    // Goes: 3 -> 25 -> 50 -> 100 -> 200 -> 150 -> 120 -> 100
+    """
 
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(1024)
-        self.bn4 = nn.BatchNorm1d(512)
-        self.bn5 = nn.BatchNorm1d(256)
-
-        self.k = k
-
-    def forward(self, x):
-        batchsize = x.size()[0]
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
-        x = torch.max(x, 2, keepdim=True)[0]
-        x = x.view(-1, 1024)
-
-        x = F.relu(self.bn4(self.fc1(x)))
-        x = F.relu(self.bn5(self.fc2(x)))
-        x = self.fc3(x)
-
-        iden = (
-            Variable(torch.from_numpy(np.eye(self.k).flatten().astype(np.float32)))
-            .view(1, self.k * self.k)
-            .repeat(batchsize, 1)
-        )
-        if x.is_cuda:
-            iden = iden.cuda()
-        x = x + iden
-        x = x.view(-1, self.k, self.k)
-        return x
-
-
-class PointNetEncoder(nn.Module):
     def __init__(
-        self, global_feat=True, feature_transform=False, channel=3, out_dim=128
+        self,
+        latent_dimensionality: int,
+        convolutional_output_dim: int,
+        conv_layer_sizes,
+        fc_layer_sizes,
+        transformer_positions,
+        end_in_batchnorm=False,
     ):
-        super(PointNetEncoder, self).__init__()
-        self.out_dim = out_dim
-        self.stn = STN3d(channel)
-        self.conv1 = torch.nn.Conv1d(channel, 64, 1)
-        self.conv2 = torch.nn.Conv1d(64, 128, 1)
-        self.conv3 = torch.nn.Conv1d(128, out_dim, 1)
-        self.bn1 = nn.BatchNorm1d(64)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(out_dim)
-        self.global_feat = global_feat
-        self.feature_transform = feature_transform
-        if self.feature_transform:
-            self.fstn = STNkd(k=64)
+
+        super(SimplePointNet, self).__init__()
+        self.LD = latent_dimensionality
+        self.CD = convolutional_output_dim
+        self.transformer_positions = transformer_positions
+        self.num_transformers = len(self.transformer_positions)
+
+        assert self.CD % 2 == 0, "Input Conv dim must be even"
+
+        # Basic order #
+        # B x N x 3 --Conv_layers--> B x C --Fc_layers--> B x L
+        # We divide the output by two in the conv layers because we are using
+        # both average and max pooling, which will be concatenated.
+        self._conv_sizes = [3] + [k for k in conv_layer_sizes] + [self.CD]  # //2
+        self._fc_sizes = [self.CD] + [k for k in fc_layer_sizes]
+
+        ### Convolutional Layers ###
+        self.conv_layers = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv1d(self._conv_sizes[i], self._conv_sizes[i + 1], 1),
+                    nn.BatchNorm1d(self._conv_sizes[i + 1]),
+                    nn.ReLU(),
+                )
+                for i in range(len(self._conv_sizes) - 1)
+            ]
+        )
+
+        ### Transformers ###
+        # These are run and applied to the input after the corresponding convolutional
+        # layer is run. Note that they never change the feature size (or indeed the
+        # tensor shape in general).
+        # E.g. if 0 is given in the positions, a 3x3 matrix set will be applied.
+        self.transformers = nn.ModuleList(
+            [
+                SimpleTransformer(self._conv_sizes[jj])
+                for jj in self.transformer_positions
+            ]
+        )
+
+        ### Fully Connected Layers ###
+        self.fc_layers = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(self._fc_sizes[i], self._fc_sizes[i + 1]),
+                    nn.BatchNorm1d(self._fc_sizes[i + 1]),
+                    nn.ReLU(),
+                )
+                for i in range(len(self._fc_sizes) - 1)
+            ]
+            + (
+                [nn.Linear(self._fc_sizes[-1], self.LD), nn.BatchNorm1d(self.LD)]
+                if end_in_batchnorm
+                else [nn.Linear(self._fc_sizes[-1], self.LD)]
+            )
+        )
+
+    def move_eye(self, device):
+        for t in self.transformers:
+            t.move_eye(device)
+
+    def forward(self, P):
+        """
+        Input: B x N x 3 point clouds (non-permuted)
+        Output: B x LD embedded shapes
+        """
+        P = P.permute(0, 2, 1)
+        assert P.shape[1] == 3, "Unexpected shape"
+        # Now P is B x 3 x N
+        for i, layer in enumerate(self.conv_layers):
+            if i in self.transformer_positions:
+                T = self.transformers[self.transformer_positions.index(i)](P)
+                P = layer(torch.bmm(T, P))
+            else:
+                P = layer(P)
+        # Pool over the number of points.
+        # i.e. P: B x C_D x N --Pool--> B x C_D x 1
+        # Then, P: B x C_D x 1 --> B x C_D (after squeeze)
+        # Note: F.max_pool1d(input, kernel_size)
+        P = F.max_pool1d(P, P.shape[2]).squeeze(2)
+        # P = #torch.cat( (
+        #      F.max_pool1d(P, P.shape[2]).squeeze(2),
+        #            F.avg_pool1d(P, P.shape[2]).squeeze(2) ),
+        #      dim=1)
+        for j, layer in enumerate(self.fc_layers):
+            P = layer(P)
+        return P
+
+
+##############################################################################################
+
+
+class SimpleTransformer(nn.Module):
+    def __init__(
+        self,
+        input_dimensionality,
+        convolutional_dimensions=(64, 128, 512),
+        fc_dimensions=(512, 256),
+    ):
+
+        super(SimpleTransformer, self).__init__()
+
+        # Setting network dimensions
+        self.input_feature_len = input_dimensionality
+        self.conv_dims = [self.input_feature_len] + [
+            a for a in convolutional_dimensions
+        ]
+        self.fc_dims = [f for f in fc_dimensions]  # + [self.input_feature_len**2]
+
+        ### Convolutional Layers ###
+        self.conv_layers = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv1d(self.conv_dims[i], self.conv_dims[i + 1], 1),
+                    nn.BatchNorm1d(self.conv_dims[i + 1]),
+                    nn.ReLU(),
+                )
+                for i in range(len(self.conv_dims) - 1)
+            ]
+        )
+
+        ### Fully Connected Layers ###
+        self.fc_layers = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(self.fc_dims[i], self.fc_dims[i + 1]), nn.ReLU()
+                )
+                for i in range(len(self.fc_dims) - 1)
+            ]
+            + [nn.Linear(self.fc_dims[-1], self.input_feature_len**2)]
+        )
+
+        ### Identity matrix added to the transformer at the end ###
+        self.eye = torch.eye(self.input_feature_len)
 
     def forward(self, x):
-        B, D, N = x.size()
-        trans = self.stn(x)
-        x = x.transpose(2, 1)
-        if D > 3:
-            feature = x[:, :, 3:]
-            x = x[:, :, :3]
-        x = torch.bmm(x, trans)
-        if D > 3:
-            x = torch.cat([x, feature], dim=2)
-        x = x.transpose(2, 1)
-        x = F.relu(self.bn1(self.conv1(x)))
+        """
+        Input: B x F x N, e.g. F = 3 at the beginning
+            i.e. expects a permuted point cloud batch
+        Output: B x F x F set of transformation matrices
+        """
+        SF = x.shape[1]  # Size of the features per point
+        # assert SF == self.input_feature_len, "Untenable feature len"
 
-        if self.feature_transform:
-            trans_feat = self.fstn(x)
-            x = x.transpose(2, 1)
-            x = torch.bmm(x, trans_feat)
-            x = x.transpose(2, 1)
-        else:
-            trans_feat = None
+        # Unfortunately, I need to handle the current device here
+        # because eye is local and I don't see a better way to
+        # do this. However, nowhere is a device setting kept.
+        # if x.is_cuda: device = x.get_device()
+        # else:         device = torch.device('cpu')
 
-        pointfeat = x
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = self.bn3(self.conv3(x))
-        x = torch.max(x, 2, keepdim=True)[0]
-        x = x.view(-1, self.out_dim)
-        if self.global_feat:
-            return x, trans, trans_feat
-        else:
-            x = x.view(-1, self.out_dim, 1).repeat(1, 1, N)
-            return torch.cat([x, pointfeat], 1), trans, trans_feat
+        # Convolutional layers
+        for i, layer in enumerate(self.conv_layers):
+            x = layer(x)
+        # Max pooling
+        x = F.max_pool1d(x, x.shape[2]).squeeze(2)
+        # Fully connected layers
+        for j, layer in enumerate(self.fc_layers):
+            x = layer(x)
+        # Fold into list of matrices
+        # x = x.view(-1, SF, SF) + self.eye
+        x = x.view(-1, SF, SF) + self.eye.to(x.device)
+        # x += self.eye.to(device)
+        return x
 
-
-def feature_transform_reguliarzer(trans):
-    d = trans.size()[1]
-    I = torch.eye(d)[None, :, :]
-    if trans.is_cuda:
-        I = I.cuda()
-    loss = torch.mean(
-        torch.norm(torch.bmm(trans, trans.transpose(2, 1)) - I, dim=(1, 2))
-    )
-    return loss
+    def move_eye(self, device):
+        self.eye = self.eye.to(device)
