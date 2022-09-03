@@ -117,32 +117,14 @@ class PointCloudDataset(Dataset):
 class PointCloudMultiDataset(Dataset):
     def __init__(
         self,
-        root_dir,
-        split_file,
+        file_names,
         on_surface_points,
         max_points=-1,
         expand=-1,
         train=False,
     ):
         self.on_surface_points = on_surface_points
-        self.root_dir = root_dir
-        print(root_dir)
-
-        with open(split_file, "r") as in_file:
-            data = json.load(in_file)
-
-        if train:
-            split_data = data["train"]
-        else:
-            split_data = data["test"]
-
-        self.instances = []
-        for cat in split_data:
-            for filename in split_data[cat]:
-                self.instances.append(
-                    os.path.join(root_dir, cat, filename, "ori_sample.h5")
-                )
-
+        self.instances = [f"os.path.join({x}, ori_sample.h5)" for x in file_names]
         assert len(self.instances) != 0, "No objects in the data directory"
 
         self.all_instances = [

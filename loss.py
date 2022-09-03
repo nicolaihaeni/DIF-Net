@@ -65,7 +65,7 @@ def deform_implicit_loss(
         "sdf": torch.abs(sdf_constraint).mean() * 3e3,
         "inter": inter_constraint.mean() * 5e2,
         "normal_constraint": normal_constraint.mean() * 1e2,
-        "grad_constraint": grad_constraint.mean() * 5e1,
+        "grad_constraint": grad_constraint.mean() * 1e-3,
         "embeddings_constraint": embeddings_constraint.mean() * 1e6,
         "grad_temp_constraint": grad_temp_constraint.mean() * loss_grad_temp,
         "grad_deform_constraint": grad_deform_constraint.mean() * loss_grad_deform,
@@ -76,14 +76,10 @@ def deform_implicit_loss(
 def embedding_loss(model_output, gt):
     gt_sdf = gt["sdf"]
     gt_normals = gt["normals"]
-    gt_embed = gt["embedding"]
 
     pred_sdf = model_output["model_out"]
 
-    embed = model_output["latent_vec"]
-    z_mu = model_output["z_mu"]
-    z_var = model_output["z_var"]
-
+    embeddings = model_output["latent_vec"]
     gradient_sdf = model_output["grad_sdf"]
 
     # sdf regression loss from Sitzmannn et al. 2020
@@ -102,8 +98,7 @@ def embedding_loss(model_output, gt):
     )
     grad_constraint = torch.abs(gradient_sdf.norm(dim=-1) - 1)
 
-    embeddings_constraint = torch.mean(F.l1_loss(embed, gt_embed))
-    kl_constraint = 0.5 * torch.mean(torch.exp(z_var) + z_mu**2 - 1.0 - z_var)
+    embeddings_constraint = torch.mean(embeddings**2)
 
     # -----------------
     return {
@@ -112,5 +107,15 @@ def embedding_loss(model_output, gt):
         "normal_constraint": normal_constraint.mean() * 1e2,
         "grad_constraint": grad_constraint.mean() * 5e1,
         "embeddings_constraint": embeddings_constraint.mean() * 1e6,
-        "kl_constraint": kl_constraint.mean() * 1e6,
+    }
+
+
+def encoder_loss(model_output, gt):
+    embed = model_output["latent_vec"]
+    gt_embed = model_output["gt_latent_vec"]
+    embeddings_constraint = torch.mean(F.mse_loss(gt_embed, embed))
+
+    # -----------------
+    return {
+        "embeddings_constraint": embeddings_constraint.mean() * 1e6,
     }

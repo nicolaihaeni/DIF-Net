@@ -321,7 +321,6 @@ def convert_sdf_samples_with_color_to_ply(
 
 def save_poincloud_ply(points, ply_filename_out):
     points = points.squeeze(0).detach().cpu().numpy()
-    points = np.transpose(points)
 
     # try writing to the ply file
     num_verts = points.shape[0]

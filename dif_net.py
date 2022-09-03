@@ -6,9 +6,9 @@
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 import modules
 from meta_modules import HyperNetwork
-from pointnet import Encoder
 from loss import *
 
 
@@ -197,10 +197,8 @@ class DeformedImplicitField(nn.Module):
         return losses
 
     # for evaluation
-    def embedding(self, embed, mu, var, model_input, gt):
-        instance_idx = model_input["instance_idx"]
+    def embedding(self, embed, model_input, gt):
         coords = model_input["coords"]  # 3 dimensional input coordinates
-        embedding = self.get_latent_code(instance_idx)
 
         # get network weights for Deform-net using Hyper-net
         hypo_params = self.hyper_net(embed)
@@ -228,14 +226,23 @@ class DeformedImplicitField(nn.Module):
             0
         ]  # normal direction in original shape space
 
-        gt["embedding"] = embedding
         model_out = {
             "model_in": model_output["model_in"],
             "model_out": sdf_final,
             "latent_vec": embed,
             "grad_sdf": grad_sdf,
-            "z_mu": mu,
-            "z_var": var,
         }
         losses = embedding_loss(model_out, gt)
+
+        return losses
+
+    # Make encoder replicate the learned latent space
+    def fit_encoder(self, embed, model_input, gt):
+        instance_idx = model_input["instance_idx"]
+        embedding = self.get_latent_code(instance_idx)
+        model_out = {
+            "latent_vec": embed,
+            "gt_latent_vec": embedding,
+        }
+        losses = encoder_loss(model_out, gt)
         return losses

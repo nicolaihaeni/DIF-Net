@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import os
+import json
 import torch
 
 
@@ -66,3 +67,18 @@ def load_checkpoints(args, model, optimizer=None, name="decoder"):
         else:
             model.load_state_dict(ckpt["model_state_dict"])
     return start, model, optimizer
+
+
+def get_filenames(data_dir, split_file, train=False):
+    with open(split_file, "r") as f:
+        data = json.load(f)
+        if train:
+            data = data["train"]
+        else:
+            data = data["test"]
+
+    instances = []
+    for cat in data:
+        for filename in data[cat]:
+            instances.append(os.path.join(data_dir, cat, filename, "ori_sample.h5"))
+    return instances

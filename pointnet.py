@@ -5,8 +5,8 @@ from torch.nn import functional as F
 
 class Encoder(nn.Module):
     def __init__(self, latent_dim, desc_size=512, train=False):
-        nn.Module.__init__(self)
-        self.train = train
+        super().__init__()
+        self.training = train
         self.latent_dim = latent_dim
         self.ptnet = SimplePointNet(
             latent_dim * 2, desc_size, [32, 128, 256], [512, 256, 128], [0]
@@ -14,7 +14,7 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         latent = self.ptnet(x)
-        if self.train:
+        if self.training:
             self.z_mu = latent[..., : self.latent_dim]
             self.z_var = latent[..., self.latent_dim :]
             std = torch.exp(self.z_var / 2)

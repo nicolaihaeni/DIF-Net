@@ -1,7 +1,7 @@
 root_dir: /home/isleri/haeni001/data/gen_sdf
 split_file: split/plane.json
 logging_root: ./logs
-experiment_name: plane
+experiment_name: plane_two_stage
 batch_size: 64
 epochs: 60
 expand: 0.01

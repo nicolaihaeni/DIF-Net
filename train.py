@@ -123,19 +123,13 @@ if __name__ == "__main__":
 
     # define dataloader
     train_dataset = dataset.PointCloudMultiDataset(
-        root_dir=meta_params["root_dir"],
-        split_file=meta_params["split_file"],
+        utils.get_filenames(
+            meta_params["root_dir"], meta_params["split_file"], train=True
+        ),
         on_surface_points=opt.on_surface_points,
         max_points=meta_params["max_points"],
         expand=meta_params["expand"],
         train=True,
-    )
-    val_dataset = dataset.PointCloudMultiDataset(
-        root_dir=meta_params["root_dir"],
-        split_file=meta_params["split_file"],
-        max_points=meta_params["max_points"],
-        expand=meta_params["expand"],
-        on_surface_points=opt.on_surface_points,
     )
     train_loader = DataLoader(
         train_dataset,
@@ -146,15 +140,6 @@ if __name__ == "__main__":
         drop_last=True,
         prefetch_factor=8,
         collate_fn=train_dataset.collate_fn,
-    )
-    val_loader = DataLoader(
-        val_dataset,
-        shuffle=False,
-        batch_size=meta_params["batch_size"],
-        pin_memory=True,
-        num_workers=24,
-        drop_last=False,
-        collate_fn=val_dataset.collate_fn,
     )
 
     print("Total subjects: ", train_dataset.num_instances)
@@ -188,15 +173,12 @@ if __name__ == "__main__":
         optim=optim,
         start_epoch=start,
         train_dataloader=train_loader,
-        val_dataloader=val_loader,
         model_dir=root_path,
         **meta_params
     )
 
     # After the encoder is trained, train the encoder
-    encoder = Encoder(latent_dim=meta_params["latent_dim"], train=True)
-    encoder = nn.DataParallel(encoder).cuda()
-
+    encoder = Encoder(latent_dim=meta_params["latent_dim"], train=True).cuda()
     optim = torch.optim.Adam(lr=meta_params["lr"], params=encoder.parameters())
 
     # Check if model should be resumed
@@ -204,13 +186,12 @@ if __name__ == "__main__":
         meta_params, encoder, optim, name="encoder"
     )
     # main encoder training loop
-    training_loop.train_encoder(
+    training_loop.train(
         encoder=encoder,
         model=model,
         optim=optim,
         start_epoch=start,
         train_dataloader=train_loader,
-        val_dataloader=val_loader,
         model_dir=root_path,
         **meta_params
     )

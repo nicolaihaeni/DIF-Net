@@ -1,6 +1,7 @@
 experiment_name: plane
 hidden_num: 256
 latent_dim: 1024
+num_instances: 3494
 model_type: sine
 root_dir: /home/isleri/haeni001/data/gen_sdf
 split_file: split/plane.json
