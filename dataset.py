@@ -8,11 +8,14 @@ import os
 import json
 import h5py
 import numpy as np
+import open3d as o3d
 
 import torch
-import open3d as o3d
+import torchvision.transforms as T
 from torch.utils.data import Dataset
 from dgl.geometry import farthest_point_sampler
+
+import utils
 
 
 class PointCloudDataset(Dataset):
@@ -205,3 +208,134 @@ class PointCloudMultiDataset(Dataset):
         ]
 
         return observations, ground_truth
+
+
+class DepthDataset(Dataset):
+    def __init__(self, file_paths, num_views=30):
+        super().__init__()
+
+        self.file_paths = file_paths
+        self.num_views = num_views
+        self.length = len(file_paths) * num_views
+
+        self.transform_list = [
+            "identity",
+            "jitter",
+            "gray",
+            "equalize",
+            "posterize",
+            "contrast",
+            "solarize",
+        ]
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        # view_idx = np.random.randint(0, self.num_views)
+        view_idx = 1
+        with h5py.File(self.file_paths[idx], "r") as hf:
+            image = hf["rgb"][view_idx] / 255.0
+            depth = hf["depth"][view_idx]
+            mask = hf["mask"][view_idx]
+
+        depth[depth == 100.0] = 10.0
+
+        # Bounding box computation and move bbox
+        x, y = np.where(mask)
+        bbox = min(x), max(x), min(y), max(y)
+        W, H = 256, 256
+        w, h = bbox[1] - bbox[0], bbox[3] - bbox[2]
+
+        min_range = 1 / (min(h, w) / 40)
+        max_range = 1 / (max(h, w) / (256 * 0.9))
+
+        scale_factor = np.random.uniform(min_range, max_range)
+        image = utils.resize_array(image, bbox, scale_factor, pad_value=1.0)
+        depth = utils.resize_array(
+            depth, bbox, scale_factor, pad_value=10.0, inter="nearest"
+        )
+        mask = utils.resize_array(mask, bbox, scale_factor, pad_value=0.0)
+        depth[np.where(mask == 0)] = 10.0
+        depth[depth != 10.0] /= scale_factor
+        depth = torch.tensor(depth).float()
+        mask = torch.tensor(mask).float()
+
+        # Image augmentations
+        image = T.ToTensor()(image)
+
+        probs = torch.ones(len(self.transform_list))
+        probs[0] = 4
+        dist = torch.distributions.categorical.Categorical(probs=probs)
+        aug = self.transform_list[dist.sample()]
+        aug = "solarize"
+
+        if aug == "jitter":
+            image = T.ColorJitter(
+                brightness=(0.25, 0.75), hue=(-0.4, 0.4), saturation=(0.25, 0.75)
+            )(image)
+        if aug == "gray":
+            image = T.Grayscale(3)(image)
+        if aug == "equalize":
+            image = (image * 255.0).to(dtype=torch.uint8)
+            image = T.RandomEqualize(1.0)(image)
+            image = (image / 255.0).float()
+        if aug == "posterize":
+            image = (image * 255.0).to(dtype=torch.uint8)
+            image = T.RandomPosterize(bits=2, p=1.0)(image)
+            image = (image / 255.0).float()
+        if aug == "solarize":
+            image = (image * 255.0).to(dtype=torch.uint8)
+            image = T.RandomSolarize(threshold=192, p=1.0)(image)
+            image = (image / 255.0).float()
+
+        image = image.permute(1, 2, 0)
+        image[torch.where(mask == 0)] = 1.0
+
+        return {
+            "images": image.numpy(),
+            "depths": depth,
+            "masks": mask,
+        }
+
+
+if __name__ == "__main__":
+    filename = "test_data/100715345ee54d7ae38b52b4ee9d36a3/100715345ee54d7ae38b52b4ee9d36a3_rgbd.h5"
+    dataset = DepthDataset(file_paths=[filename])
+
+    view_idx = 1
+    with h5py.File(filename, "r") as hf:
+        image = hf["rgb"][view_idx] / 255.0
+        depth = hf["depth"][view_idx]
+        mask = hf["mask"][view_idx]
+
+    depth[depth == 100.0] = 10.0
+    data = dataset[0]
+
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(2, 3)
+    ax[0, 0].imshow(image)
+    ax[0, 1].imshow(depth, cmap="plasma", vmin=0, vmax=10.0)
+    ax[0, 2].imshow(mask, cmap="gray")
+
+    ax[1, 0].imshow(data["images"])
+    ax[1, 1].imshow(data["depths"], cmap="plasma", vmin=0.0, vmax=10.0)
+    ax[1, 2].imshow(data["masks"], cmap="gray")
+    plt.show()
+
+    # Recreate the point clouds and check if they align
+    # import open3d as o3d
+
+    # depth_img = o3d.geometry.Image(depth)
+    # intrinsics = o3d.camera.PinholeCameraIntrinsic()
+    # intrinsics.intrinsic_matrix = [
+    # [262.5, 0.0, 128],
+    # [0.0, 262.5, 128],
+    # [0.0, 0.0, 1.0],
+    # ]
+    # pcd = o3d.geometry.PointCloud.create_from_depth_image(depth_img, intrinsics)
+
+    # depth_img = o3d.geometry.Image(data["depths"])
+    # pcd_two = o3d.geometry.PointCloud.create_from_depth_image(depth_img, intrinsics)
+    # o3d.visualization.draw_geometries([pcd_two, pcd])

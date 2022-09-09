@@ -2,6 +2,8 @@
 # Licensed under the MIT License.
 
 import os
+import cv2
+import numpy as np
 import torch
 
 
@@ -66,3 +68,27 @@ def load_checkpoints(args, model, optimizer=None, name="decoder"):
         else:
             model.load_state_dict(ckpt["model_state_dict"])
     return start, model, optimizer
+
+
+def resize_array(array, bbox, scale_factor, pad_value, inter=None):
+    temp = array[bbox[0] : bbox[1], bbox[2] : bbox[3]]
+    if inter is not None:
+        temp = cv2.resize(
+            temp,
+            None,
+            fx=scale_factor,
+            fy=scale_factor,
+            interpolation=cv2.INTER_NEAREST,
+        )
+    else:
+        temp = cv2.resize(
+            temp, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_CUBIC
+        )
+
+    h, w = temp.shape[:2]
+    out_array = np.ones_like(array) * pad_value
+    out_array[
+        int(128 - h // 2) : int(128 - h // 2) + h,
+        int(128 - w // 2) : (128 - w // 2) + w,
+    ] = temp
+    return out_array
