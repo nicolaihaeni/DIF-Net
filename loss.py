@@ -71,11 +71,9 @@ def deform_implicit_loss(
 
 
 def embedding_loss(model_output, gt):
-
     gt_sdf = gt["sdf"]
     gt_normals = gt["normals"]
 
-    coords = model_output["model_in"]
     pred_sdf = model_output["model_out"]
 
     embeddings = model_output["latent_vec"]

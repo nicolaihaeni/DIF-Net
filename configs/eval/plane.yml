@@ -1,17 +1,14 @@
-root_dir: /home/isleri/haeni001/data/dif/
+experiment_name: 'plane_partial_symmetry'
+checkpoint_path: 'models/plane/checkpoints/model_epoch_0060.pth'
+root_dir: /home/isleri/haeni001/data/dif/plane/
 split_file: split/plane.json
 logging_root: ./logs
-experiment_name: plane 
 
-batch_size: 256
-epochs: 70
+batch_size: 1
+epochs: 30
 epochs_til_checkpoint: 5
-expand: 0.01
 hidden_num: 128
 latent_dim: 128
-loss_correct: 100.0
-loss_grad_deform: 2
-loss_grad_temp: 100.0
 lr: 0.0001
 max_points: 200000
 model_type: sine

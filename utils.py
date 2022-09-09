@@ -5,6 +5,7 @@ import os
 import cv2
 import numpy as np
 import torch
+import numpy as np
 
 
 def cond_mkdir(path):
@@ -34,7 +35,7 @@ def save_checkpoints(path, model, optimizer, global_step):
         )
 
 
-def load_checkpoints(args, model, optimizer=None, name="decoder"):
+def load_checkpoints(args, model, optimizer=None):
     """Load model, optimzer and global iteration from file"""
     start = 0
 
@@ -49,7 +50,7 @@ def load_checkpoints(args, model, optimizer=None, name="decoder"):
     ckpts = [
         os.path.join(experiment_path, f)
         for f in sorted(os.listdir(experiment_path))
-        if f.endswith(".tar") and name in f
+        if f.endswith(".tar")
     ]
 
     print(f"Found checkpoints {ckpts}")
@@ -59,8 +60,9 @@ def load_checkpoints(args, model, optimizer=None, name="decoder"):
         ckpt = torch.load(ckpt_path)
 
         start = ckpt["epoch"]
-        if optimizer is not None:
-            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        optimizer = torch.optim.Adam(params=model.parameters()).load_state_dict(
+            ckpt["optimizer_state_dict"]
+        )
 
         # Load model
         if isinstance(model, torch.nn.DataParallel):
@@ -92,3 +94,24 @@ def resize_array(array, bbox, scale_factor, pad_value, inter=None):
         int(128 - w // 2) : (128 - w // 2) + w,
     ] = temp
     return out_array
+
+
+def get_filenames(root_dir, split_file, mode="train"):
+    with open(split_file, "r") as in_file:
+        data = json.load(in_file)[mode]
+
+    instances = []
+    for cat in data:
+        for filename in data[cat]:
+            instances.append(os.path.join(root_dir, filename, f"{filename}.h5"))
+    return instances
+
+
+def normalize(vec):
+    return vec / (np.linalg.norm(vec, axis=-1, keepdims=True) + 1e-9)
+
+
+def sample_spherical(n, radius=3.0):
+    xyz = np.random.normal(size=(n, 3))
+    xyz = normalize(xyz) * radius
+    return xyz

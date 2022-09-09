@@ -1,9 +1,9 @@
-experiment_name: 'plane'
-checkpoint_path: 'models/plane/checkpoints/model_epoch_0060.pth'
+experiment_name: 'chair'
+checkpoint_path: 'models/chair/checkpoints/model_epoch_0060.pth'
 root_dir: /home/isleri/haeni001/data/dif/
-split_file: split/plane.json
+split_file: split/chair.json
 
-num_instances: 3500
+num_instances: 4000
 latent_dim: 128
 model_type: 'sine'
 hidden_num: 128

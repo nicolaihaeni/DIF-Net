@@ -14,6 +14,7 @@ import torch
 import torchvision.transforms as T
 from torch.utils.data import Dataset
 from dgl.geometry import farthest_point_sampler
+import open3d as o3d
 
 import utils
 
@@ -21,50 +22,55 @@ import utils
 class PointCloudDataset(Dataset):
     def __init__(
         self,
-        point_cloud_path,
+        file_name,
         on_surface_points,
         instance_idx=None,
         expand=-1,
         max_points=200000,
+        cam_pose=None,
+        symmetry=False,
     ):
         super().__init__()
 
         self.instance_idx = instance_idx
         self.on_surface_points = on_surface_points
-        self.point_cloud_path = point_cloud_path
+        self.file_name = file_name
         self.max_points = max_points
         self.expand = expand
+        self.len_coords = 500000
+        self.is_test = cam_pose is not None
 
-        print(f"Loading data of subject {self.instance_idx}")
-        with h5py.File(point_cloud_path, "r") as hf:
-            coords = hf["surface_pts"][:]
-            free_points = hf["free_pts"][:]
+        print(f"Loading data of subject {self.instance_idx}.")
+        with h5py.File(self.file_name, "r") as hf:
+            self.coords = hf["surface_pts"][:]
+            self.free_points = hf["free_pts"][:]
 
-        self.coords = coords[:, :3]
-        self.normals = coords[:, 3:6]
-        self.free_points_coords = free_points[:, :3]
-        self.free_points_sdf = free_points[:, 3]
+        if cam_pose is not None:
+            self.gt_coords = self.coords[:, :3]
+            pcd = o3d.geometry.PointCloud(
+                o3d.utility.Vector3dVector(self.coords[:, :3])
+            )
+            _, pt_map = pcd.hidden_point_removal(cam_pose, 6.0 * 100)
+            self.coords = self.coords[pt_map, :]
 
-        # Voxel downsample
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(self.coords)
-        down_pcd = pcd.voxel_down_sample(voxel_size=0.01)
-
-        # Conditional input farthest point sampling
-        points = np.asarray(down_pcd.points)
-        farthest_points = farthest_point_sampler(
-            pos=torch.tensor(points).unsqueeze(0), npoints=1024
-        )
-        self.farthest_points = np.transpose(points[farthest_points.squeeze(0).numpy()])
+            if symmetry:
+                reflected_coords = self.coords.copy()
+                reflected_coords[:, 0] = -reflected_coords[:, 0]
+                self.coords = np.concatenate([self.coords, reflected_coords])
 
     def __len__(self):
         if self.max_points != -1:
             return self.max_points // self.on_surface_points
-        return self.coords.shape[0] // self.on_surface_points
+        return self.len_coords // self.on_surface_points
 
     def __getitem__(self, idx):
-        point_cloud_size = self.coords.shape[0]
-        free_point_size = self.free_points_coords.shape[0]
+        coords = self.coords[:, :3]
+        normals = self.coords[:, 3:6]
+        free_points_coords = self.free_points[:, :3]
+        free_points_sdf = self.free_points[:, 3]
+
+        point_cloud_size = coords.shape[0]
+        free_point_size = free_points_coords.shape[0]
 
         off_surface_samples = self.on_surface_points
         total_samples = self.on_surface_points + off_surface_samples
@@ -72,8 +78,8 @@ class PointCloudDataset(Dataset):
         # Random coords
         rand_idcs = np.random.choice(point_cloud_size, size=self.on_surface_points)
 
-        on_surface_coords = self.coords[rand_idcs, :]
-        on_surface_normals = self.normals[rand_idcs, :]
+        on_surface_coords = coords[rand_idcs, :]
+        on_surface_normals = normals[rand_idcs, :]
 
         if self.expand != -1:
             on_surface_coords += (
@@ -86,7 +92,7 @@ class PointCloudDataset(Dataset):
         free_rand_idcs = np.random.choice(
             free_point_size, size=off_surface_samples // 2
         )
-        free_points_coords = self.free_points_coords[free_rand_idcs, :]
+        free_points_coords = free_points_coords[free_rand_idcs, :]
 
         off_surface_normals = np.ones((off_surface_samples, 3)) * -1
 
@@ -96,22 +102,30 @@ class PointCloudDataset(Dataset):
         # if a free space point has gt SDF value, replace -1 with it.
         if self.expand != -1:
             sdf[self.on_surface_points + off_surface_samples // 2 :, :] = (
-                self.free_points_sdf[free_rand_idcs][:, None] - self.expand
+                free_points_sdf[free_rand_idcs][:, None] - self.expand
             )
         else:
             sdf[
                 self.on_surface_points + off_surface_samples // 2 :, :
-            ] = self.free_points_sdf[free_rand_idcs][:, None]
+            ] = free_points_sdf[free_rand_idcs][:, None]
 
         coords = np.concatenate(
             (on_surface_coords, off_surface_coords, free_points_coords), axis=0
         )
         normals = np.concatenate((on_surface_normals, off_surface_normals), axis=0)
 
+        if self.is_test:
+            num_partial_points = self.on_surface_points + off_surface_samples // 2
+            return {
+                "coords": torch.from_numpy(coords[:num_partial_points]).float(),
+                "sdf": torch.from_numpy(sdf[:num_partial_points]).float(),
+                "normals": torch.from_numpy(normals[:num_partial_points]).float(),
+                "instance_idx": torch.tensor([self.instance_idx]).squeeze().long(),
+            }
+
         return {
             "coords": torch.from_numpy(coords).float(),
             "sdf": torch.from_numpy(sdf).float(),
-            "farthest_points": torch.from_numpy(self.farthest_points).float(),
             "normals": torch.from_numpy(normals).float(),
             "instance_idx": torch.tensor([self.instance_idx]).squeeze().long(),
         }
@@ -120,41 +134,28 @@ class PointCloudDataset(Dataset):
 class PointCloudMultiDataset(Dataset):
     def __init__(
         self,
-        root_dir,
-        split_file,
+        file_names,
         on_surface_points,
         max_points=-1,
         expand=-1,
-        train=False,
+        cam_pose=None,
+        symmetry=False,
+        **kwargs,
     ):
         self.on_surface_points = on_surface_points
-        self.root_dir = root_dir
-        print(root_dir)
 
-        with open(split_file, "r") as in_file:
-            data = json.load(in_file)
-
-        if train:
-            split_data = data["train"]
-        else:
-            split_data = data["test"]
-
-        self.instances = []
-        for cat in split_data:
-            for filename in split_data[cat]:
-                self.instances.append(
-                    os.path.join(root_dir, cat, filename, "ori_sample.h5")
-                )
-
+        self.instances = file_names
         assert len(self.instances) != 0, "No objects in the data directory"
 
         self.all_instances = [
             PointCloudDataset(
-                point_cloud_path=dir,
+                file_name=dir,
                 on_surface_points=on_surface_points,
                 max_points=max_points,
                 instance_idx=idx,
                 expand=expand,
+                cam_pose=cam_pose,
+                symmetry=symmetry,
             )
             for idx, dir in enumerate(self.instances)
         ]
@@ -164,6 +165,12 @@ class PointCloudMultiDataset(Dataset):
 
     def __len__(self):
         return np.sum(self.num_per_instance_observations)
+
+    def get_point_clouds(self, idx):
+        return (
+            self.all_instances[idx].coords[:, :3],
+            self.all_instances[idx].gt_coords[:, :3],
+        )
 
     def get_instance_idx(self, idx):
         """Maps an index into all tuples of all objects to the idx of the tuple relative to the other tuples of that
@@ -206,7 +213,6 @@ class PointCloudMultiDataset(Dataset):
         ground_truth = [
             {"sdf": obj["sdf"], "normals": obj["normals"]} for obj in observations
         ]
-
         return observations, ground_truth
 
 

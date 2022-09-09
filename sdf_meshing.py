@@ -138,7 +138,6 @@ def get_mesh_color(mesh_points, embedding, model):
         head += max_batch
 
     mesh_colors = np.clip(mesh_colors / 2 + 0.5, 0, 1)  # normalize color to 0-1
-
     return mesh_colors
 
 
@@ -319,18 +318,36 @@ def convert_sdf_samples_with_color_to_ply(
     )
 
 
-def save_poincloud_ply(points, ply_filename_out):
-    points = points.squeeze(0).detach().cpu().numpy()
-    points = np.transpose(points)
+def save_poincloud_ply(points, model, embedding, ply_filename_out):
+    if points.shape[0] == 3:
+        points = np.transpose(points)
+
+    colors = get_mesh_color(points, embedding=embedding, model=model)
+    colors = np.clip(colors * 255, 0, 255).astype(np.uint8)
 
     # try writing to the ply file
     num_verts = points.shape[0]
 
     verts_tuple = np.zeros((num_verts,), dtype=[("x", "f4"), ("y", "f4"), ("z", "f4")])
+    colors_tuple = np.zeros(
+        (num_verts,), dtype=[("red", "u1"), ("green", "u1"), ("blue", "u1")]
+    )
+
     for i in range(0, num_verts):
         verts_tuple[i] = tuple(points[i, :])
 
-    el_verts = plyfile.PlyElement.describe(verts_tuple, "vertex")
+    for i in range(0, num_verts):
+        colors_tuple[i] = tuple(colors[i, :])
+
+    verts_all = np.empty(num_verts, verts_tuple.dtype.descr + colors_tuple.dtype.descr)
+
+    for prop in verts_tuple.dtype.names:
+        verts_all[prop] = verts_tuple[prop]
+
+    for prop in colors_tuple.dtype.names:
+        verts_all[prop] = colors_tuple[prop]
+
+    el_verts = plyfile.PlyElement.describe(verts_all, "vertex")
 
     ply_data = plyfile.PlyData([el_verts])
     logging.debug("saving point cloud to %s" % (ply_filename_out))

@@ -68,11 +68,14 @@ class DeformedImplicitField(nn.Module):
         return hypo_params, embedding
 
     def get_latent_code(self, instance_idx):
+
         embedding = self.latent_codes(instance_idx)
+
         return embedding
 
     # for generation
     def inference(self, coords, embedding):
+
         with torch.no_grad():
             model_in = {"coords": coords}
             hypo_params = self.hyper_net(embedding)
@@ -83,6 +86,7 @@ class DeformedImplicitField(nn.Module):
             new_coords = coords + deformation
             model_input_temp = {"coords": new_coords}
             model_output_temp = self.template_field(model_input_temp)
+
             return model_output_temp["model_out"] + correction
 
     def get_template_coords(self, coords, embedding):
@@ -103,13 +107,13 @@ class DeformedImplicitField(nn.Module):
             return model_output["model_out"]
 
     # for training
-    def forward(self, model_input, gt, embedding=None, **kwargs):
+    def forward(self, model_input, gt, **kwargs):
+
         instance_idx = model_input["instance_idx"]
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
-        if embedding is None:
-            # get network weights for Deform-net using Hyper-net
-            embedding = self.latent_codes(instance_idx)
+        # get network weights for Deform-net using Hyper-net
+        embedding = self.latent_codes(instance_idx)
         hypo_params = self.hyper_net(embedding)
 
         # [deformation field, correction field]
@@ -182,7 +186,6 @@ class DeformedImplicitField(nn.Module):
 
     # for evaluation
     def embedding(self, embed, model_input, gt):
-
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
         # get network weights for Deform-net using Hyper-net

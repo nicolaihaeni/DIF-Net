@@ -3,31 +3,34 @@
 
 """Main training loop for DIF-Net.
 """
-import os
-import time
-import numpy as np
 import torch
 import utils
 from torch.utils.tensorboard import SummaryWriter
-import torch.nn.functional as F
 from tqdm.autonotebook import tqdm
+import time
+import numpy as np
+import os
+import sdf_meshing
+from utils import save_checkpoints
 
 
 def train(
     model,
-    optim,
-    start_epoch,
     train_dataloader,
-    val_dataloader,
     epochs,
     lr,
     steps_til_summary,
-    steps_til_validation,
     epochs_til_checkpoint,
     model_dir,
     loss_schedules=None,
+    is_train=True,
+    optim=None,
+    model_name=None,
+    mesh_path=None,
+    dataset=None,
     **kwargs,
 ):
+
     print("Training Info:")
     print("data_path:\t\t", kwargs["root_dir"])
     print("num_instances:\t\t", kwargs["num_instances"])
@@ -36,12 +39,21 @@ def train(
     print("learning rate:\t\t", lr)
     for key in kwargs:
         if "loss" in key:
-            print(key + ":\t\t", kwargs[key])
+            print(key + ":\t", kwargs[key])
+
+    if is_train and optim is None:
+        optim = torch.optim.Adam(lr=lr, params=model.parameters())
+    else:
+        embedding = (
+            model.latent_codes(torch.zeros(1).long().cuda()).clone().detach()
+        )  # initialization for evaluation stage
+        embedding.requires_grad = True
+        optim = torch.optim.Adam(lr=lr, params=[embedding])
 
     if not os.path.isdir(model_dir):
         os.makedirs(model_dir)
 
-    summaries_dir = os.path.join(model_dir, "summaries", "decoder")
+    summaries_dir = os.path.join(model_dir, "summaries")
     utils.cond_mkdir(summaries_dir)
 
     checkpoints_dir = os.path.join(model_dir, "checkpoints")
@@ -49,19 +61,44 @@ def train(
 
     writer = SummaryWriter(summaries_dir)
 
-    total_steps = start_epoch * len(train_dataloader)
-    print("Start training the decoder...")
+    total_steps = 0
     with tqdm(total=len(train_dataloader) * epochs) as pbar:
         train_losses = []
-        pbar.update(total_steps)
-        for epoch in range(start_epoch, epochs):
+        for epoch in range(epochs):
+            if not epoch % epochs_til_checkpoint and epoch:
+                if is_train:
+                    save_checkpoints(
+                        os.path.join(checkpoints_dir, "model_epoch_%04d.pth" % epoch),
+                        model,
+                        optim,
+                        epoch,
+                    )
+                else:
+                    embed_save = embedding.detach().squeeze().cpu().numpy()
+                    np.savetxt(
+                        os.path.join(
+                            checkpoints_dir, "embedding_epoch_%04d.txt" % epoch
+                        ),
+                        embed_save,
+                    )
+
+                np.savetxt(
+                    os.path.join(
+                        checkpoints_dir, "train_losses_epoch_%04d.txt" % epoch
+                    ),
+                    np.array(train_losses),
+                )
+
             for step, (model_input, gt) in enumerate(train_dataloader):
                 start_time = time.time()
 
                 model_input = {key: value.cuda() for key, value in model_input.items()}
                 gt = {key: value.cuda() for key, value in gt.items()}
 
-                losses = model(model_input, gt, **kwargs)
+                if is_train:
+                    losses = model(model_input, gt, **kwargs)
+                else:
+                    losses = model.embedding(embedding, model_input, gt)
 
                 train_loss = 0.0
                 for loss_name, loss in losses.items():
@@ -81,6 +118,15 @@ def train(
                 train_losses.append(train_loss.item())
                 writer.add_scalar("total_train_loss", train_loss, total_steps)
 
+                if not total_steps % steps_til_summary:
+                    if is_train:
+                        save_checkpoints(
+                            os.path.join(checkpoints_dir, "model_current.pth"),
+                            model,
+                            optim,
+                            epoch,
+                        )
+
                 optim.zero_grad()
                 train_loss.backward()
                 optim.step()
@@ -95,128 +141,44 @@ def train(
 
                 total_steps += 1
 
-            if not epoch % epochs_til_checkpoint and epoch:
-                utils.save_checkpoints(
-                    os.path.join(checkpoints_dir, f"decoder_epoch_{epoch}.tar"),
-                    model,
-                    optim,
-                    epoch,
-                )
+        if is_train:
+            save_checkpoints(
+                os.path.join(checkpoints_dir, "model_final.pth"),
+                model,
+                optim,
+                epoch,
+            )
+        else:
+            embed_save = embedding.detach().squeeze().cpu().numpy()
+            np.savetxt(
+                os.path.join(checkpoints_dir, "embedding_epoch_%04d.txt" % epoch),
+                embed_save,
+            )
+            sdf_meshing.create_mesh(
+                model,
+                os.path.join(mesh_path, model_name),
+                embedding=embedding,
+                N=256,
+                level=0,
+                get_color=False,
+            )
 
-                np.savetxt(
-                    os.path.join(
-                        checkpoints_dir, "train_losses_epoch_%04d.txt" % epoch
-                    ),
-                    np.array(train_losses),
-                )
+            # Save the ground truth and partial point cloud to files
+            partial_pcd, gt_pcd = dataset.get_point_clouds(0)
+            sdf_meshing.save_poincloud_ply(
+                gt_pcd,
+                model,
+                embedding,
+                os.path.join(mesh_path, f"{model_name}_gt.ply"),
+            )
+            sdf_meshing.save_poincloud_ply(
+                partial_pcd,
+                model,
+                embedding,
+                os.path.join(mesh_path, f"{model_name}_partial.ply"),
+            )
 
-        utils.save_checkpoints(
-            os.path.join(checkpoints_dir, "decoder_final.tar"),
-            model,
-            optim,
-            epochs,
+        np.savetxt(
+            os.path.join(checkpoints_dir, "train_losses_final.txt"),
+            np.array(train_losses),
         )
-
-    np.savetxt(
-        os.path.join(checkpoints_dir, "train_losses_final.txt"),
-        np.array(train_losses),
-    )
-
-
-def train_encoder(
-    encoder,
-    model,
-    optim,
-    start_epoch,
-    train_dataloader,
-    val_dataloader,
-    epochs,
-    lr,
-    steps_til_summary,
-    steps_til_validation,
-    epochs_til_checkpoint,
-    model_dir,
-    loss_schedules=None,
-    **kwargs,
-):
-    print("Training Info:")
-    print("data_path:\t\t", kwargs["root_dir"])
-    print("num_instances:\t\t", kwargs["num_instances"])
-    print("batch_size:\t\t", kwargs["batch_size"])
-    print("epochs:\t\t\t", epochs)
-    print("learning rate:\t\t", lr)
-    for key in kwargs:
-        if "loss" in key:
-            print(key + ":\t\t", kwargs[key])
-
-    if not os.path.isdir(model_dir):
-        os.makedirs(model_dir)
-
-    summaries_dir = os.path.join(model_dir, "summaries", "encoder")
-    utils.cond_mkdir(summaries_dir)
-
-    checkpoints_dir = os.path.join(model_dir, "checkpoints")
-    utils.cond_mkdir(checkpoints_dir)
-
-    writer = SummaryWriter(summaries_dir)
-
-    # Do not change the decoder behaviour
-    model.eval()
-    encoder.train()
-
-    total_steps = start_epoch * len(train_dataloader)
-    print("Start training the encoder...")
-    with tqdm(total=len(train_dataloader) * epochs) as pbar:
-        train_losses = []
-        pbar.update(total_steps)
-        for epoch in range(start_epoch, epochs):
-            for step, (model_input, gt) in enumerate(train_dataloader):
-                start_time = time.time()
-
-                points = model_input["farthest_points"].cuda()
-                embedding, _, _ = encoder(points)
-
-                gt_embedding = model.get_latent_code(model_input["instance_idx"].cuda())
-                loss = F.mse_loss(embedding, gt_embedding)
-
-                optim.zero_grad()
-                loss.backward()
-                optim.step()
-
-                writer.add_scalar("loss", loss, total_steps)
-                pbar.update(1)
-
-                if not total_steps % steps_til_summary:
-                    tqdm.write(
-                        "Epoch %d, Total loss %0.6f, iteration time %0.6f"
-                        % (epoch, loss, time.time() - start_time)
-                    )
-
-                total_steps += 1
-
-            if not epoch % epochs_til_checkpoint and epoch:
-                utils.save_checkpoints(
-                    os.path.join(checkpoints_dir, f"encoder_epoch_{epoch}.tar"),
-                    encoder,
-                    optim,
-                    epoch,
-                )
-
-                np.savetxt(
-                    os.path.join(
-                        checkpoints_dir, "train_losses_encoder_epoch_%04d.txt" % epoch
-                    ),
-                    np.array(train_losses),
-                )
-
-        utils.save_checkpoints(
-            os.path.join(checkpoints_dir, "encoder_final.tar"),
-            encoder,
-            optim,
-            epochs,
-        )
-
-    np.savetxt(
-        os.path.join(checkpoints_dir, "train_losses_encoder_final.txt"),
-        np.array(train_losses),
-    )

@@ -18,7 +18,6 @@ import torch
 from torch.utils.data import DataLoader
 
 import dataset, modules, utils
-from pointnet import PointNetEncoder
 from dif_net import DeformedImplicitField
 import sdf_meshing
 
@@ -42,8 +41,7 @@ with open(os.path.join(opt.config), "r") as stream:
 
 # define dataloader
 test_dataset = dataset.PointCloudMultiDataset(
-    root_dir=meta_params["root_dir"],
-    split_file=meta_params["split_file"],
+    utils.get_filenames(meta_params["root_dir"], meta_params["split_file"]),
     on_surface_points=1000,
     max_points=1000,
     train=True,
@@ -54,26 +52,16 @@ dataloader = DataLoader(
     shuffle=False,
     batch_size=1,
     pin_memory=True,
-    num_workers=4,
+    num_workers=0,
     drop_last=False,
     collate_fn=test_dataset.collate_fn,
 )
 
-print("Total subjects: ", 3494)
-meta_params["num_instances"] = 3494
+print("Total subjects: ", len(test_dataset))
 
 # define DIF-Net
 model = DeformedImplicitField(**meta_params).cuda()
-ckpt = torch.load(meta_params["checkpoint_path"])
-model.load_state_dict(ckpt["model_state_dict"])
-
-# Define the encoder
-encoder = PointNetEncoder(out_dim=meta_params["latent_dim"]).cuda()
-ckpt = torch.load(meta_params["encoder_checkpoint_path"])
-encoder.load_state_dict(ckpt["model_state_dict"])
-
-# Load model parameters
-encoder.eval()
+model.load_state_dict(torch.load(meta_params["checkpoint_path"]))
 model.eval()
 
 # create save path
@@ -92,12 +80,11 @@ for step, (model_input, gt) in enumerate(dataloader):
 
     # Save the input point cloud
     sdf_meshing.save_poincloud_ply(
-        model_input["farthest_points"],
+        model_input["farthest_points"].squeeze(0).detach().cpu().numpy(),
         os.path.join(mesh_path, f"model_{step}_input.ply"),
     )
 
-    embedding, _, _ = encoder(model_input["farthest_points"])
-    # embedding = model.get_latent_code(torch.tensor([step]).cuda())
+    embedding = model.get_latent_code(torch.tensor([step]).cuda())
 
     # Save the ouput mesh
     sdf_meshing.create_mesh(
@@ -112,7 +99,7 @@ for step, (model_input, gt) in enumerate(dataloader):
         break
 
 # Save the template with varying thresholds
-threshs = [0.0, 0.1, 0.2]
+threshs = [0.0, 0.01, 0.02]
 for thresh in threshs:
     # Save the ouput mesh
     sdf_meshing.create_mesh(
