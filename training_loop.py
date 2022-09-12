@@ -11,7 +11,7 @@ import time
 import numpy as np
 import os
 import sdf_meshing
-from utils import save_checkpoints
+from utils import save_checkpoints, to_png, depth_to_png
 
 
 def train(
@@ -252,25 +252,37 @@ def train_depth_model(
                     [model_input["images"], model_input["masks"][..., None]], -1
                 ).permute(0, 3, 1, 2)
                 gt = model_input["depths"]
-                losses = model(inputs, gt)
-
-                train_loss = 0.0
-                for loss_name, loss in losses.items():
-                    single_loss = loss.mean()
-
-                    if loss_schedules is not None and loss_name in loss_schedules:
-                        writer.add_scalar(
-                            loss_name + "_weight",
-                            loss_schedules[loss_name](total_steps),
-                            total_steps,
-                        )
-                        single_loss *= loss_schedules[loss_name](total_steps)
-
-                    writer.add_scalar(loss_name, single_loss, total_steps)
-                    train_loss += single_loss
+                model_outputs = model(inputs, gt)
+                train_loss = model_outputs["depth_loss"].mean()
 
                 train_losses.append(train_loss.item())
                 writer.add_scalar("total_train_loss", train_loss, total_steps)
+
+                # Add sample images to tensorboard
+                writer.add_image(
+                    "image",
+                    model_input["images"][0],
+                    dataformat="HWC",
+                    global_step=total_steps,
+                )
+                writer.add_image(
+                    "depth",
+                    model_input["depths"][0],
+                    dataformat="HW",
+                    global_step=total_steps,
+                )
+                writer.add_image(
+                    "mask",
+                    model_input["masks"][0],
+                    dataformat="HW",
+                    global_step=total_steps,
+                )
+                writer.add_image(
+                    "prediction",
+                    model_outputs["depth"][0],
+                    dataformat="HW",
+                    global_step=total_steps,
+                )
 
                 if not total_steps % steps_til_summary:
                     save_checkpoints(

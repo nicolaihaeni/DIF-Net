@@ -115,3 +115,18 @@ def sample_spherical(n, radius=3.0):
     xyz = np.random.normal(size=(n, 3))
     xyz = normalize(xyz) * radius
     return xyz
+
+
+def to_png(img):
+    if torch.is_tensor(img):
+        img = img.detach().cpu().numpy()
+    return np.clip(img * 255, 0, 255).astype(np.uint8)
+
+
+def depth_to_png(depth):
+    if torch.is_tensor(depth):
+        depth = depth.detach().cpu().numpy()
+    old_min, old_max = 0, 10.0
+    new_min, new_max = 0, 255
+    depth = (new_max - new_min) / (old_max - old_min) * (depth - old_min) + new_min
+    return np.clip(depth, 0, 255).astype(np.uint8)
