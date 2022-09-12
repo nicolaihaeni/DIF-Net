@@ -52,6 +52,10 @@ class DepthNet(nn.Module):
             setattr(self, "decoder_" + layer_name, module_list)
             self.decoders[layer_name] = module_list
 
+        # Nonlinearity
+        self.nonlinear = nn.Sigmoid()
+        self.max_depth = 10.0
+
     def forward(self, im, gt=None):
         # Encode
         feat = im
@@ -70,7 +74,7 @@ class DepthNet(nn.Module):
                     feat_map = feat_maps[-(idx + 2)]
                     assert feat_map.shape[2:4] == x.shape[2:4]
                     x = torch.cat((x, feat_map), dim=1)
-            model_outputs[layer_name] = x
+            model_outputs[layer_name] = self.max_depth * self.nonlinear(x)
 
         if gt is not None:
             model_outputs["depth_loss"] = depth_loss(model_outputs["depth"], gt)
