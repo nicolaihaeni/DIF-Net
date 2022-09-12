@@ -120,5 +120,5 @@ for file in file_names:
     chamfer_dist.append(cd)
     f1_score.append(f1)
 
-print("Average Chamfer Distance:", np.mean(chamfer_dist))
+print("Average Chamfer Distance:", 1e4 * np.mean(chamfer_dist))
 print("Average F1 Score @1:", np.mean(f1_score))

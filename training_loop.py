@@ -182,3 +182,126 @@ def train(
             os.path.join(checkpoints_dir, "train_losses_final.txt"),
             np.array(train_losses),
         )
+
+
+def train_depth_model(
+    model,
+    train_dataloader,
+    epochs,
+    lr,
+    steps_til_summary,
+    epochs_til_checkpoint,
+    model_dir,
+    loss_schedules=None,
+    is_train=True,
+    optim=None,
+    model_name=None,
+    mesh_path=None,
+    dataset=None,
+    **kwargs,
+):
+
+    print("Training Info:")
+    print("data_path:\t\t", kwargs["root_dir"])
+    print("num_instances:\t\t", kwargs["num_instances"])
+    print("batch_size:\t\t", kwargs["batch_size"])
+    print("epochs:\t\t\t", epochs)
+    print("learning rate:\t\t", lr)
+    for key in kwargs:
+        if "loss" in key:
+            print(key + ":\t", kwargs[key])
+
+    if is_train and optim is None:
+        optim = torch.optim.Adam(lr=lr, params=model.parameters())
+
+    if not os.path.isdir(model_dir):
+        os.makedirs(model_dir)
+
+    summaries_dir = os.path.join(model_dir, "summaries")
+    utils.cond_mkdir(summaries_dir)
+
+    checkpoints_dir = os.path.join(model_dir, "checkpoints")
+    utils.cond_mkdir(checkpoints_dir)
+
+    writer = SummaryWriter(summaries_dir)
+
+    total_steps = 0
+    with tqdm(total=len(train_dataloader) * epochs) as pbar:
+        train_losses = []
+        for epoch in range(epochs):
+            if not epoch % epochs_til_checkpoint and epoch:
+                save_checkpoints(
+                    os.path.join(checkpoints_dir, "model_epoch_%04d.pth" % epoch),
+                    model,
+                    optim,
+                    epoch,
+                )
+
+                np.savetxt(
+                    os.path.join(
+                        checkpoints_dir, "train_losses_epoch_%04d.txt" % epoch
+                    ),
+                    np.array(train_losses),
+                )
+
+            for step, batch in enumerate(train_dataloader):
+                start_time = time.time()
+
+                model_input = {key: value.cuda() for key, value in model_input.items()}
+                inputs = torch.cat(
+                    [model_input["images"], model_input["masks"][..., None]], -1
+                ).permute(0, 3, 1, 2)
+                gt = model_input["depths"]
+                losses = model(inputs, gt)
+
+                train_loss = 0.0
+                for loss_name, loss in losses.items():
+                    single_loss = loss.mean()
+
+                    if loss_schedules is not None and loss_name in loss_schedules:
+                        writer.add_scalar(
+                            loss_name + "_weight",
+                            loss_schedules[loss_name](total_steps),
+                            total_steps,
+                        )
+                        single_loss *= loss_schedules[loss_name](total_steps)
+
+                    writer.add_scalar(loss_name, single_loss, total_steps)
+                    train_loss += single_loss
+
+                train_losses.append(train_loss.item())
+                writer.add_scalar("total_train_loss", train_loss, total_steps)
+
+                if not total_steps % steps_til_summary:
+                    save_checkpoints(
+                        os.path.join(checkpoints_dir, "model_current.pth"),
+                        model,
+                        optim,
+                        epoch,
+                    )
+
+                optim.zero_grad()
+                train_loss.backward()
+                optim.step()
+
+                pbar.update(1)
+
+                if not total_steps % steps_til_summary:
+                    tqdm.write(
+                        "Epoch %d, Total loss %0.6f, iteration time %0.6f"
+                        % (epoch, train_loss, time.time() - start_time)
+                    )
+
+                total_steps += 1
+
+        save_checkpoints(
+            os.path.join(checkpoints_dir, "model_final.pth"),
+            model,
+            optim,
+            epoch,
+        )
+
+        np.savetxt(
+            os.path.join(checkpoints_dir, "train_losses_final.txt"),
+            np.array(train_losses),
+        )

@@ -217,12 +217,13 @@ class PointCloudMultiDataset(Dataset):
 
 
 class DepthDataset(Dataset):
-    def __init__(self, file_paths, num_views=30):
+    def __init__(self, file_paths, num_views=30, train=False):
         super().__init__()
 
         self.file_paths = file_paths
         self.num_views = num_views
         self.length = len(file_paths) * num_views
+        self.is_train = train
 
         self.transform_list = [
             "identity",
@@ -230,7 +231,6 @@ class DepthDataset(Dataset):
             "gray",
             "equalize",
             "posterize",
-            "contrast",
             "solarize",
         ]
 
@@ -244,104 +244,140 @@ class DepthDataset(Dataset):
             image = hf["rgb"][view_idx] / 255.0
             depth = hf["depth"][view_idx]
             mask = hf["mask"][view_idx]
+            K = hf["K"][:]
+            cam2world = hf["cam2world"][view_idx]
 
         depth[depth == 100.0] = 10.0
 
-        # Bounding box computation and move bbox
-        x, y = np.where(mask)
-        bbox = min(x), max(x), min(y), max(y)
-        W, H = 256, 256
-        w, h = bbox[1] - bbox[0], bbox[3] - bbox[2]
+        if self.is_train:
+            # Bounding box computation and move bbox
+            x, y = np.where(mask)
+            bbox = min(x), max(x), min(y), max(y)
+            W, H = 256, 256
+            w, h = bbox[1] - bbox[0], bbox[3] - bbox[2]
 
-        min_range = 1 / (min(h, w) / 40)
-        max_range = 1 / (max(h, w) / (256 * 0.9))
+            prob = np.random.rand()
+            if prob > 0.5:
+                min_range = 1 / (min(h, w) / 40)
+                max_range = 1 / (max(h, w) / (256 * 0.9))
 
-        scale_factor = np.random.uniform(min_range, max_range)
-        image = utils.resize_array(image, bbox, scale_factor, pad_value=1.0)
-        depth = utils.resize_array(
-            depth, bbox, scale_factor, pad_value=10.0, inter="nearest"
-        )
-        mask = utils.resize_array(mask, bbox, scale_factor, pad_value=0.0)
-        depth[np.where(mask == 0)] = 10.0
-        depth[depth != 10.0] /= scale_factor
+                scale_factor = np.random.uniform(min_range, max_range)
+                scale_factor = int(scale_factor * W) / W
+                image = utils.resize_array(image, bbox, scale_factor, pad_value=1.0)
+                depth = utils.resize_array(
+                    depth, bbox, scale_factor, pad_value=10.0, inter="nearest"
+                )
+                mask = utils.resize_array(
+                    mask, bbox, scale_factor, pad_value=0.0, inter="nearest"
+                )
+                # depth = depth / scale_factor
+                depth[np.where(mask == 0)] = 10.0
+                image[np.where(mask == 0)] = 1.0
+
+        image = T.ToTensor()(image)
         depth = torch.tensor(depth).float()
         mask = torch.tensor(mask).float()
 
         # Image augmentations
-        image = T.ToTensor()(image)
+        if self.is_train:
+            probs = torch.ones(len(self.transform_list))
+            dist = torch.distributions.categorical.Categorical(probs=probs)
+            aug = self.transform_list[dist.sample()]
 
-        probs = torch.ones(len(self.transform_list))
-        probs[0] = 4
-        dist = torch.distributions.categorical.Categorical(probs=probs)
-        aug = self.transform_list[dist.sample()]
-        aug = "solarize"
+            if aug == "jitter":
+                image = T.ColorJitter(
+                    brightness=(0.25, 0.75), hue=(-0.4, 0.4), saturation=(0.25, 0.75)
+                )(image)
+            if aug == "gray":
+                image = T.Grayscale(3)(image)
+            if aug == "equalize":
+                image = (image * 255.0).to(dtype=torch.uint8)
+                image = T.RandomEqualize(1.0)(image)
+                image = (image / 255.0).float()
+            if aug == "posterize":
+                image = (image * 255.0).to(dtype=torch.uint8)
+                image = T.RandomPosterize(bits=2, p=1.0)(image)
+                image = (image / 255.0).float()
+            if aug == "solarize":
+                image = (image * 255.0).to(dtype=torch.uint8)
+                image = T.RandomSolarize(threshold=192, p=1.0)(image)
+                image = (image / 255.0).float()
 
-        if aug == "jitter":
-            image = T.ColorJitter(
-                brightness=(0.25, 0.75), hue=(-0.4, 0.4), saturation=(0.25, 0.75)
-            )(image)
-        if aug == "gray":
-            image = T.Grayscale(3)(image)
-        if aug == "equalize":
-            image = (image * 255.0).to(dtype=torch.uint8)
-            image = T.RandomEqualize(1.0)(image)
-            image = (image / 255.0).float()
-        if aug == "posterize":
-            image = (image * 255.0).to(dtype=torch.uint8)
-            image = T.RandomPosterize(bits=2, p=1.0)(image)
-            image = (image / 255.0).float()
-        if aug == "solarize":
-            image = (image * 255.0).to(dtype=torch.uint8)
-            image = T.RandomSolarize(threshold=192, p=1.0)(image)
-            image = (image / 255.0).float()
-
-        image = image.permute(1, 2, 0)
+        image = image.permute(1, 2, 0).clone()
         image[torch.where(mask == 0)] = 1.0
 
         return {
             "images": image.numpy(),
-            "depths": depth,
-            "masks": mask,
+            "depths": depth.numpy(),
+            "masks": mask.numpy(),
+            "K": torch.tensor(K).float(),
+            "cam2world": torch.tensor(cam2world).float().numpy(),
         }
 
 
 if __name__ == "__main__":
-    filename = "test_data/100715345ee54d7ae38b52b4ee9d36a3/100715345ee54d7ae38b52b4ee9d36a3_rgbd.h5"
+    point_filename = "example_dir/1c14ef4c48b7d95d61c6c61410fc904b/1c14ef4c48b7d95d61c6c61410fc904b.h5"
+    filename = "example_dir/1c14ef4c48b7d95d61c6c61410fc904b/1c14ef4c48b7d95d61c6c61410fc904b_rgbd.h5"
     dataset = DepthDataset(file_paths=[filename])
 
     view_idx = 1
     with h5py.File(filename, "r") as hf:
         image = hf["rgb"][view_idx] / 255.0
-        depth = hf["depth"][view_idx]
+        depth_before = hf["depth"][view_idx]
         mask = hf["mask"][view_idx]
 
-    depth[depth == 100.0] = 10.0
-    data = dataset[0]
+    with h5py.File(point_filename, "r") as hf:
+        surface_points = hf["surface_pts"][:, :3]
 
-    import matplotlib.pyplot as plt
+    for ii in range(50):
+        data = dataset[0]
 
-    fig, ax = plt.subplots(2, 3)
-    ax[0, 0].imshow(image)
-    ax[0, 1].imshow(depth, cmap="plasma", vmin=0, vmax=10.0)
-    ax[0, 2].imshow(mask, cmap="gray")
+        import matplotlib.pyplot as plt
 
-    ax[1, 0].imshow(data["images"])
-    ax[1, 1].imshow(data["depths"], cmap="plasma", vmin=0.0, vmax=10.0)
-    ax[1, 2].imshow(data["masks"], cmap="gray")
-    plt.show()
+        fig, ax = plt.subplots(2, 3)
+        ax[0, 0].imshow(image)
+        ax[0, 1].imshow(depth_before, cmap="plasma", vmin=0, vmax=10.0)
+        ax[0, 2].imshow(mask, cmap="gray")
 
-    # Recreate the point clouds and check if they align
+        ax[1, 0].imshow(data["images"])
+        ax[1, 1].imshow(data["depths"], cmap="plasma", vmin=0.0, vmax=10.0)
+        ax[1, 2].imshow(data["masks"], cmap="gray")
+        plt.show()
+
+    # # Recreate the point clouds and check if they align
     # import open3d as o3d
 
-    # depth_img = o3d.geometry.Image(depth)
-    # intrinsics = o3d.camera.PinholeCameraIntrinsic()
-    # intrinsics.intrinsic_matrix = [
-    # [262.5, 0.0, 128],
-    # [0.0, 262.5, 128],
-    # [0.0, 0.0, 1.0],
-    # ]
-    # pcd = o3d.geometry.PointCloud.create_from_depth_image(depth_img, intrinsics)
+    # surface_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(surface_points))
+    # surface_pcd.paint_uniform_color(np.array([1, 0, 0]))
 
-    # depth_img = o3d.geometry.Image(data["depths"])
-    # pcd_two = o3d.geometry.PointCloud.create_from_depth_image(depth_img, intrinsics)
-    # o3d.visualization.draw_geometries([pcd_two, pcd])
+    # depth_before[depth_before == 10.0] = np.inf
+    # depth_after = data["depths"]
+    # depth_after[depth_after == 10.0] = np.inf
+
+    # u, v = np.where(depth_before != np.inf)
+    # y = depth_before[u, v] * ((u - 128.0) / 262.5)
+    # x = depth_before[u, v] * ((v - 128.0) / 262.5)
+    # z = depth_before[u, v]
+    # pts = np.stack([x, y, z], axis=-1)
+
+    # pcd_before = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pts))
+    # pcd_before.paint_uniform_color(np.array([0, 1, 0]))
+    # pcd_before.transform(data["cam2world"])
+    # pcd_before.paint_uniform_color(np.array([0, 1, 0]))
+
+    # u, v = np.where(depth_after != np.inf)
+    # y = depth_after[u, v] * ((u - 128.0) / 262.5)
+    # x = depth_after[u, v] * ((v - 128.0) / 262.5)
+    # z = depth_after[u, v]
+    # pts = np.stack([x, y, z], axis=-1)
+
+    # pcd_after = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pts))
+    # pcd_after.paint_uniform_color(np.array([0, 0, 1]))
+    # pcd_after.transform(data["cam2world"])
+
+    # axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
+    # camera = o3d.geometry.TriangleMesh.create_coordinate_frame()
+    # camera.transform(data["cam2world"])
+    # o3d.visualization.draw_geometries(
+    # [surface_pcd, pcd_before, pcd_after, axis, camera]
+    # )
