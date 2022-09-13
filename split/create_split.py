@@ -17,8 +17,8 @@ for category_name in category_names:
             train_lines.append(line.rstrip())
 
     data = {}
-    data["test"] = test_lines
-    data["train"] = train_lines
+    data["test"] = {category_name: test_lines}
+    data["train"] = {category_name: train_lines}
 
     with open(f"{category_name}.json", "w") as outfile:
         json.dump(data, outfile)
