@@ -74,7 +74,7 @@ class DepthNet(nn.Module):
                     feat_map = feat_maps[-(idx + 2)]
                     assert feat_map.shape[2:4] == x.shape[2:4]
                     x = torch.cat((x, feat_map), dim=1)
-            model_outputs[layer_name] = self.max_depth * self.nonlinear(x)
+            model_outputs[layer_name] = (self.max_depth * self.nonlinear(x)).squeeze(1)
 
         if gt is not None:
             model_outputs["depth_loss"] = depth_loss(model_outputs["depth"], gt)

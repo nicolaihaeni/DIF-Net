@@ -2,10 +2,11 @@
 # Licensed under the MIT License.
 
 import os
+import json
+import numpy as np
+
 import cv2
-import numpy as np
 import torch
-import numpy as np
 
 
 def cond_mkdir(path):
@@ -96,14 +97,21 @@ def resize_array(array, bbox, scale_factor, pad_value, inter=None):
     return out_array
 
 
-def get_filenames(root_dir, split_file, mode="train"):
+def get_filenames(root_dir, split_file, mode="train", depth=False):
     with open(split_file, "r") as in_file:
         data = json.load(in_file)[mode]
 
     instances = []
     for cat in data:
         for filename in data[cat]:
-            instances.append(os.path.join(root_dir, filename, f"{filename}.h5"))
+            if depth:
+                instances.append(
+                    os.path.join(root_dir, cat, filename, f"{filename}_rgbd.h5")
+                )
+            else:
+                instances.append(
+                    os.path.join(root_dir, cat, filename, f"{filename}.h5")
+                )
     return instances
 
 

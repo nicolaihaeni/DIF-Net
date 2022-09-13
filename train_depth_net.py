@@ -79,23 +79,23 @@ if __name__ == "__main__":
             meta_params = yaml.safe_load(stream)
 
     # define dataloader
-    train_dataset = dataset.DepthDataset(
-        utils.get_filenames(meta_params["root_dir"], meta_params["split_file"]),
-        train=True,
+    filenames = utils.get_filenames(
+        meta_params["root_dir"], meta_params["split_file"], depth=True
     )
+    train_dataset = dataset.DepthDataset(filenames, train=True)
     train_loader = DataLoader(
         train_dataset,
         shuffle=True,
-        batch_size=meta_params["batch_size"],
+        # batch_size=meta_params["batch_size"],
+        batch_size=4,
         pin_memory=True,
-        num_workers=24,
+        num_workers=0,
         drop_last=True,
-        prefetch_factor=8,
-        collate_fn=train_dataset.collate_fn,
+        # prefetch_factor=8,
     )
 
-    print("Total subjects: ", train_dataset.num_instances)
-    meta_params["num_instances"] = train_dataset.num_instances
+    print("Total subjects: ", len(train_dataset))
+    meta_params["num_instances"] = len(train_dataset)
 
     # create save path
     root_path = os.path.join(
@@ -107,8 +107,8 @@ if __name__ == "__main__":
         yaml.dump(meta_params, outfile, default_flow_style=False, allow_unicode=True)
 
     # define DIF-Net
-    model = DepthNet([1], ["depth"], 4)
-    model = nn.DataParallel(model).cuda()
+    model = DepthNet([1], ["depth"], 4).cuda()
+    # model = nn.DataParallel(model).cuda()
 
     # Check if model should be resumed
     start, model, optim = utils.load_checkpoints(meta_params, model)

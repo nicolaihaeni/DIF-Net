@@ -14,7 +14,6 @@ import torch
 import torchvision.transforms as T
 from torch.utils.data import Dataset
 from dgl.geometry import farthest_point_sampler
-import open3d as o3d
 
 import utils
 
@@ -238,8 +237,9 @@ class DepthDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        # view_idx = np.random.randint(0, self.num_views)
-        view_idx = 1
+        idx = idx // self.num_views
+
+        view_idx = np.random.randint(0, self.num_views)
         with h5py.File(self.file_paths[idx], "r") as hf:
             image = hf["rgb"][view_idx] / 255.0
             depth = hf["depth"][view_idx]
@@ -258,8 +258,8 @@ class DepthDataset(Dataset):
 
             prob = np.random.rand()
             if prob > 0.5:
-                min_range = 1 / (min(h, w) / 40)
-                max_range = 1 / (max(h, w) / (256 * 0.9))
+                min_range = min(1.0, 40 / (min(h, w)))
+                max_range = max(min_range, (256 * 0.9) / (max(h, w)))
 
                 scale_factor = np.random.uniform(min_range, max_range)
                 scale_factor = int(scale_factor * W) / W
