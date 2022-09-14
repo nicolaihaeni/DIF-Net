@@ -51,7 +51,7 @@ def load_checkpoints(args, model, optimizer=None):
     ckpts = [
         os.path.join(experiment_path, f)
         for f in sorted(os.listdir(experiment_path))
-        if f.endswith(".tar")
+        if f.endswith(".pth")
     ]
 
     print(f"Found checkpoints {ckpts}")

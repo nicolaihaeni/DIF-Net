@@ -1,4 +1,4 @@
-root_dir: /home/isleri/haeni001/data/dif/
+root_dir: ./example_dir
 split_file: split/plane.json
 logging_root: ./logs
 experiment_name: plane_depth
