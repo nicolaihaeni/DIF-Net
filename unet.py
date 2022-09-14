@@ -2,8 +2,6 @@ import torch
 from torch import nn
 from torchvision.models import resnet18
 
-from loss import depth_loss
-
 
 class DepthNet(nn.Module):
     """
@@ -53,8 +51,7 @@ class DepthNet(nn.Module):
             self.decoders[layer_name] = module_list
 
         # Nonlinearity
-        self.nonlinear = nn.Sigmoid()
-        self.max_depth = 10.0
+        self.criterion = nn.MSELoss()
 
     def forward(self, im, gt=None):
         # Encode
@@ -74,10 +71,14 @@ class DepthNet(nn.Module):
                     feat_map = feat_maps[-(idx + 2)]
                     assert feat_map.shape[2:4] == x.shape[2:4]
                     x = torch.cat((x, feat_map), dim=1)
-            model_outputs[layer_name] = (self.max_depth * self.nonlinear(x)).squeeze(1)
+            model_outputs[layer_name] = x.squeeze(1)
 
         if gt is not None:
-            model_outputs["depth_loss"] = depth_loss(model_outputs["depth"], gt)
+            is_fg = gt != 0.0  # excludes background
+            loss = self.criterion(model_outputs["depth"][is_fg], gt[is_fg])
+            if torch.isnan(loss):
+                print(loss)
+            model_outputs["depth_loss"] = loss * 1e2
         return model_outputs
 
 

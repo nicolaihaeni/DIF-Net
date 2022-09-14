@@ -252,38 +252,6 @@ def train_depth_model(
                 model_outputs = model(inputs, gt)
                 train_loss = model_outputs["depth_loss"]
 
-                if torch.isnan(train_loss):
-                    for image, depth, mask, pred in zip(
-                        batch["images"],
-                        batch["depths"],
-                        batch["masks"],
-                        model_outputs["depth"],
-                    ):
-                        writer.add_image(
-                            "image",
-                            image,
-                            dataformats="HWC",
-                            global_step=epoch,
-                        )
-                        writer.add_image(
-                            "depth",
-                            depth,
-                            dataformats="HW",
-                            global_step=epoch,
-                        )
-                        writer.add_image(
-                            "mask",
-                            mask,
-                            dataformats="HW",
-                            global_step=epoch,
-                        )
-                        writer.add_image(
-                            "prediction",
-                            pred,
-                            dataformats="HW",
-                            global_step=epoch,
-                        )
-
                 train_losses.append(train_loss.item())
                 writer.add_scalar("total_train_loss", train_loss, total_steps)
 
@@ -307,33 +275,35 @@ def train_depth_model(
                         % (epoch, train_loss, time.time() - start_time)
                     )
 
-                total_steps += 1
+                    # Add sample images to tensorboard
+                    writer.add_image(
+                        "image",
+                        to_png(batch["images"][0]),
+                        dataformats="HWC",
+                        global_step=epoch,
+                    )
+                    writer.add_image(
+                        "depth",
+                        depth_to_png(batch["depths"][0]),
+                        dataformats="HW",
+                        global_step=epoch,
+                    )
+                    writer.add_image(
+                        "mask",
+                        to_png(batch["masks"][0]),
+                        dataformats="HW",
+                        global_step=epoch,
+                    )
+                    prediction = model_outputs["depth"][0]
+                    prediction[batch["masks"][0] == 0.0] = 0.0
+                    writer.add_image(
+                        "prediction",
+                        depth_to_png(prediction),
+                        dataformats="HW",
+                        global_step=epoch,
+                    )
 
-            # Add sample images to tensorboard
-            writer.add_image(
-                "image",
-                batch["images"][0],
-                dataformats="HWC",
-                global_step=epoch,
-            )
-            writer.add_image(
-                "depth",
-                batch["depths"][0],
-                dataformats="HW",
-                global_step=epoch,
-            )
-            writer.add_image(
-                "mask",
-                batch["masks"][0],
-                dataformats="HW",
-                global_step=epoch,
-            )
-            writer.add_image(
-                "prediction",
-                model_outputs["depth"][0],
-                dataformats="HW",
-                global_step=epoch,
-            )
+                total_steps += 1
 
         save_checkpoints(
             os.path.join(checkpoints_dir, "model_final.pth"),

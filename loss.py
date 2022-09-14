@@ -105,8 +105,3 @@ def embedding_loss(model_output, gt):
         "grad_constraint": grad_constraint.mean() * 5e1,
         "embeddings_constraint": embeddings_constraint.mean() * 1e6,
     }
-
-
-def depth_loss(pred, gt):
-    # is_fg = self.gt != 10.  # excludes background
-    return F.mse_loss(pred, gt)

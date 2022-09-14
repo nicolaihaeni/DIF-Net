@@ -221,7 +221,7 @@ class DepthDataset(Dataset):
 
         self.file_paths = file_paths
         self.num_views = num_views
-        self.length = len(file_paths) * num_views
+        self.length = len(file_paths)
         self.is_train = train
 
         self.transform_list = [
@@ -247,32 +247,32 @@ class DepthDataset(Dataset):
             K = hf["K"][:]
             cam2world = hf["cam2world"][view_idx]
 
-        depth[depth == 100.0] = 10.0
+        depth[depth == 10.0] = 0.0
 
-        if self.is_train:
-            # Bounding box computation and move bbox
-            x, y = np.where(mask)
-            bbox = min(x), max(x), min(y), max(y)
-            W, H = 256, 256
-            w, h = bbox[1] - bbox[0], bbox[3] - bbox[2]
+        # if self.is_train:
+        # # Bounding box computation and move bbox
+        # x, y = np.where(mask)
+        # bbox = min(x), max(x), min(y), max(y)
+        # W, H = 256, 256
+        # w, h = bbox[1] - bbox[0], bbox[3] - bbox[2]
 
-            prob = np.random.rand()
-            if prob > 0.5:
-                min_range = min(1.0, 40 / (min(h, w)))
-                max_range = max(min_range, (256 * 0.9) / (max(h, w)))
+        # prob = np.random.rand()
+        # if prob > 0.5:
+        # min_range = min(1.0, 40 / (min(h, w)))
+        # max_range = max(min_range, (256 * 0.9) / (max(h, w)))
 
-                scale_factor = np.random.uniform(min_range, max_range)
-                scale_factor = int(scale_factor * W) / W
-                image = utils.resize_array(image, bbox, scale_factor, pad_value=1.0)
-                depth = utils.resize_array(
-                    depth, bbox, scale_factor, pad_value=10.0, inter="nearest"
-                )
-                mask = utils.resize_array(
-                    mask, bbox, scale_factor, pad_value=0.0, inter="nearest"
-                )
-                # depth = depth / scale_factor
-                depth[np.where(mask == 0)] = 10.0
-                image[np.where(mask == 0)] = 1.0
+        # scale_factor = np.random.uniform(min_range, max_range)
+        # scale_factor = int(scale_factor * W) / W
+        # image = utils.resize_array(image, bbox, scale_factor, pad_value=1.0)
+        # depth = utils.resize_array(
+        # depth, bbox, scale_factor, pad_value=10.0, inter="nearest"
+        # )
+        # mask = utils.resize_array(
+        # mask, bbox, scale_factor, pad_value=0.0, inter="nearest"
+        # )
+        # # depth = depth / scale_factor
+        # depth[np.where(mask == 0)] = 10.0
+        # image[np.where(mask == 0)] = 1.0
 
         image = T.ToTensor()(image)
         depth = torch.tensor(depth).float()
