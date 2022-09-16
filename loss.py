@@ -5,7 +5,10 @@
 """
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+
+from utils import depth_2_normal
 
 
 def deform_implicit_loss(
@@ -105,3 +108,63 @@ def embedding_loss(model_output, gt):
         "grad_constraint": grad_constraint.mean() * 5e1,
         "embeddings_constraint": embeddings_constraint.mean() * 1e6,
     }
+
+
+def compute_normal_loss(normal, depth_gt):
+    depth_unvalid = depth_gt == 0.0  # excludes background
+    is_fg = depth_gt != 0.0  # excludes background
+    normal_gt = depth_2_normal(depth_gt, depth_unvalid)
+
+    loss_norm = cosine_loss(normal[is_fg], normal_gt[is_fg])
+    return {"normal_loss": loss_norm}
+
+
+def compute_depth_normal_loss(depth_pred, normal_pred, depth_gt):
+    depth_unvalid = depth_gt == 0.0  # excludes background
+    is_fg = depth_gt != 0.0  # excludes background
+
+    # Compute normal maps from depth
+    normal_d = depth_2_normal(depth_pred, depth_unvalid)
+    normal_gt = depth_2_normal(depth_gt, depth_unvalid)
+
+    loss_depth = depth_loss(depth_pred[is_fg], depth_gt[is_fg])
+    loss_norm = cosine_loss(normal_d[is_fg], normal_gt[is_fg])
+    loss_refine = refined_loss(depth_pred[is_fg], depth_gt[is_fg])
+
+    return {
+        "depth_loss": 2 * loss_depth,
+        "normal_loss": loss_norm,
+        "refined_loss": loss_refine,
+    }
+
+
+def depth_loss(depth_pred, depth_gt):
+    return F.mse_loss(depth_pred, depth_gt)
+
+
+def cosine_loss(normal_pred, normal_gt):
+    normals_fg = normal_pred[..., None].permute(0, 2, 1)  # n^T, Nx1x3
+    normals_fg_gt = normal_gt[..., None]  # n, Nx3x1
+
+    nominator = torch.bmm(normals_fg, normals_fg_gt).squeeze(-1)
+    denominator = normals_fg.norm(p=2, dim=-1) * normals_fg_gt.norm(p=2, dim=1)
+
+    cos_angle = nominator / (denominator + 1e-5)
+    normal_loss = torch.acos(cos_angle).mean()
+    return normal_loss
+
+
+def refined_loss(depth, depth_gt):
+    gt_max = torch.max(depth_gt)
+
+    pred_max = torch.max(depth)
+    pred_min = torch.min(depth)
+
+    # Normalize depth
+    depth = gt_max * (depth - pred_min) / (pred_max - pred_min)
+
+    d = depth - depth_gt
+    a1 = torch.sum(d**2)
+    a2 = torch.sum(d) ** 2
+    length = d.shape[0]
+    return torch.mean(torch.div(a1, length) - (0.5 * torch.div(a2, length**2)))

@@ -18,7 +18,8 @@ import torch
 from torch.utils.data import DataLoader
 import configargparse
 from torch import nn
-from unet import DepthNet
+from unet import NormalNet, DepthPredictor
+from utils import initialize_weights
 
 
 if __name__ == "__main__":
@@ -105,19 +106,43 @@ if __name__ == "__main__":
     with io.open(os.path.join(root_path, "model.yml"), "w", encoding="utf8") as outfile:
         yaml.dump(meta_params, outfile, default_flow_style=False, allow_unicode=True)
 
-    # define DIF-Net
-    model = DepthNet([1], ["depth"], 4).cuda()
-    # model = nn.DataParallel(model).cuda()
+    # First train the normal estimation network
+    normal_model = NormalNet()
+    normal_model.apply(initialize_weights)
+    normal_model = nn.DataParallel(normal_model).cuda()
 
     # Check if model should be resumed
-    start, model, optim = utils.load_checkpoints(meta_params, model)
+    start, model, optim = utils.load_checkpoints(
+        meta_params, normal_model, subdir="normals"
+    )
 
-    # main decoder training loop
+    # main normal training loop
     training_loop.train_depth_model(
-        model=model,
+        model=normal_model,
         optim=optim,
         start_epoch=start,
         train_dataloader=train_loader,
         model_dir=root_path,
+        optimize_normals=True,
+        **meta_params
+    )
+
+    # Now define the depth network
+    depth_model = DepthPredictor()
+    depth_model.apply(initialize_weights)
+    depth_model = nn.DataParallel(depth_model).cuda()
+
+    # Check if model should be resumed
+    start, model, optim = utils.load_checkpoints(meta_params, depth_model)
+
+    # main depth training loop
+    training_loop.train_depth_model(
+        model=model,
+        normal_model=normal_model,
+        optim=optim,
+        start_epoch=start,
+        train_dataloader=train_loader,
+        model_dir=root_path,
+        optimize_normals=False,
         **meta_params
     )

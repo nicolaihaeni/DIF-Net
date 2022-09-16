@@ -7,6 +7,7 @@ import numpy as np
 
 import cv2
 import torch
+import torch.nn as nn
 
 
 def cond_mkdir(path):
@@ -36,14 +37,19 @@ def save_checkpoints(path, model, optimizer, global_step):
         )
 
 
-def load_checkpoints(args, model, optimizer=None):
+def load_checkpoints(args, model, optimizer=None, subdir=None):
     """Load model, optimzer and global iteration from file"""
     start = 0
 
     # Load checkpoints
-    experiment_path = os.path.join(
-        args["logging_root"], args["experiment_name"], "checkpoints"
-    )
+    if subdir is not None:
+        experiment_path = os.path.join(
+            args["logging_root"], args["experiment_name"], "checkpoints", subdir
+        )
+    else:
+        experiment_path = os.path.join(
+            args["logging_root"], args["experiment_name"], "checkpoints"
+        )
 
     if not os.path.exists(experiment_path):
         return start, model, optimizer
@@ -51,7 +57,7 @@ def load_checkpoints(args, model, optimizer=None):
     ckpts = [
         os.path.join(experiment_path, f)
         for f in sorted(os.listdir(experiment_path))
-        if f.endswith(".tar")
+        if f.endswith(".pth")
     ]
 
     print(f"Found checkpoints {ckpts}")
@@ -138,3 +144,48 @@ def depth_to_png(depth):
     new_min, new_max = 0, 255
     depth = (new_max - new_min) / (old_max - old_min) * (depth - old_min) + new_min
     return np.clip(depth, 0, 255).astype(np.uint8)
+
+
+def depth_2_normal(depth, depth_unvalid):
+    B, H, W = depth.shape
+    grad_out = torch.zeros((B, H, W, 3)).cuda()
+
+    fx, fy, cx, cy = 262.5, 262.5, 128.0, 128.0
+
+    # Pixel coordinates
+    X, Y = torch.meshgrid(torch.arange(0, W), torch.arange(0, H), indexing="ij")
+    X = (X - cx) / fx
+    Y = (Y - cy) / fy
+    X = X.repeat(B, 1, 1).cuda()
+    Y = Y.repeat(B, 1, 1).cuda()
+
+    X = depth * X
+    Y = depth * Y
+
+    XYZ_camera = torch.cat([X[..., None], Y[..., None], depth[..., None]], -1).cuda()
+
+    # compute tangent vectors
+    vx = XYZ_camera[:, 1:-1, 2:, :] - XYZ_camera[:, 1:-1, 1:-1, :]
+    vy = XYZ_camera[:, 2:, 1:-1, :] - XYZ_camera[:, 1:-1, 1:-1, :]
+
+    # Finally compute the cross product
+    normal = torch.cross(vx.reshape(-1, 3), vy.reshape(-1, 3))
+
+    # Avoid division by 0
+    normal = torch.where(normal < 1e-5, 1e-5 * torch.ones_like(normal), normal)
+    normal_norm = normal.norm(p=2, dim=1, keepdim=True)
+    normal_normalized = normal.div(normal_norm)
+
+    # Reshape to image
+    normal_out = normal_normalized.reshape(B, H - 2, W - 2, 3)
+    grad_out[:, 1:-1, 1:-1, :] = 0.5 - 0.5 * normal_out
+
+    # Zero out +inf
+    grad_out[depth_unvalid] = 0.0
+    return grad_out
+
+
+def initialize_weights(m):
+    if isinstance(m, nn.Conv2d):
+        if m.bias is not None:
+            nn.init.constant_(m.bias.data, 0)
