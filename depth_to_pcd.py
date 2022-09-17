@@ -107,6 +107,8 @@ if __name__ == "__main__":
     _, normal_net, _ = utils.load_checkpoints(meta_params, normal_net, subdir="normals")
     depth_net = DepthPredictor().cuda()
     _, depth_net, _ = utils.load_checkpoints(meta_params, depth_net)
+    normal_net.eval()
+    depth_net.eval()
 
     # Run the images through the depth prediction network
     normal = normal_net(
@@ -138,14 +140,16 @@ if __name__ == "__main__":
         np.array([[262.5, 0.0, 128.0], [0.0, 262.5, 128.0], [0.0, 0.0, 1.0]]),
     )
 
-    fig, ax = plt.subplots(1, 2)
-    ax[0].imshow(normal)
-    ax[1].imshow(normal_gt)
+    fig, ax = plt.subplots(1, 3)
+    dif = gt_depth - depth
+    ax[0].imshow(depth, cmap="plasma")
+    ax[1].imshow(gt_depth, cmap="plasma")
+    ax[2].imshow(dif, cmap="plasma")
     plt.show()
 
     u, v = np.where(depth != 0.0)
-    y = depth[u, v] * ((u - 128.0) / 262.5)
-    x = depth[u, v] * ((v - 128.0) / 262.5)
+    x = depth[u, v] * ((u - 128.0) / 262.5)
+    y = depth[u, v] * ((v - 128.0) / 262.5)
     z = depth[u, v]
     pts = np.stack([x, y, z], axis=-1)
 
@@ -153,8 +157,8 @@ if __name__ == "__main__":
     pcd_part.paint_uniform_color(np.array([0, 1, 0]))
 
     u, v = np.where(gt_depth != 0.0)
-    y = gt_depth[u, v] * ((u - 128.0) / 262.5)
-    x = gt_depth[u, v] * ((v - 128.0) / 262.5)
+    x = gt_depth[u, v] * ((u - 128.0) / 262.5)
+    y = gt_depth[u, v] * ((v - 128.0) / 262.5)
     z = gt_depth[u, v]
     pts = np.stack([x, y, z], axis=-1)
 
