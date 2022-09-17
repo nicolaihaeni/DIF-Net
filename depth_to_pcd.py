@@ -19,8 +19,37 @@ import torch
 from torch.utils.data import DataLoader
 import configargparse
 from torch import nn
-from unet import DepthNet
+from unet import DepthPredictor, NormalNet
 import imageio
+
+
+def depth_2_normal(depth, depth_unvalid, K):
+    H, W = depth.shape
+    grad_out = np.zeros((H, W, 3))
+    X, Y = np.meshgrid(np.arange(0, W), np.arange(0, H))
+
+    fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
+    X = ((X - cx) / fx) * depth
+    Y = ((Y - cy) / fy) * depth
+
+    XYZ_camera = np.stack([X, Y, depth], axis=-1)
+
+    # compute tangent vectors
+    vx = XYZ_camera[1:-1, 2:, :] - XYZ_camera[1:-1, 1:-1, :]
+    vy = XYZ_camera[2:, 1:-1, :] - XYZ_camera[1:-1, 1:-1, :]
+
+    # finally compute cross product
+    normal = np.cross(vx.reshape(-1, 3), vy.reshape(-1, 3))
+    normal_norm = np.linalg.norm(normal, axis=-1)
+    normal = np.divide(normal, normal_norm[:, None])
+
+    # reshape to image
+    normal_out = normal.reshape(H - 2, W - 2, 3)
+    grad_out[1:-1, 1:-1, :] = 0.5 - 0.5 * normal_out
+
+    # zero out +Inf
+    grad_out[depth_unvalid] = 0.0
+    return grad_out
 
 
 if __name__ == "__main__":
@@ -57,8 +86,9 @@ if __name__ == "__main__":
     # define dataloader
     if ".h5" in opt.filename:
         with h5py.File(opt.filename, "r") as hf:
-            imgs = hf["rgb"][0] / 255.0
-            masks = hf["mask"][0]
+            imgs = hf["rgb"][1] / 255.0
+            masks = hf["mask"][1]
+            gt_depth = hf["depth"][1]
     elif ".jpg" or ".png" in opt.filename:
         imgs = imageio.imread(opt.filename)[None]
         masks = imageio.imread(opt.filename)[None]
@@ -73,23 +103,47 @@ if __name__ == "__main__":
         yaml.dump(meta_params, outfile, default_flow_style=False, allow_unicode=True)
 
     # define DIF-Net
-    model = DepthNet([1], ["depth"], 4).cuda()
-
-    # Check if model should be resumed
-    start, model, optim = utils.load_checkpoints(meta_params, model)
+    normal_net = NormalNet().cuda()
+    _, normal_net, _ = utils.load_checkpoints(meta_params, normal_net, subdir="normals")
+    depth_net = DepthPredictor().cuda()
+    _, depth_net, _ = utils.load_checkpoints(meta_params, depth_net)
 
     # Run the images through the depth prediction network
-    inputs = torch.cat(
-        [torch.tensor(imgs)[None], torch.tensor(masks)[None, ..., None]], -1
-    ).permute(0, 3, 1, 2)
-    depth = model(inputs.cuda())["depth"]
+    normal = normal_net(
+        torch.tensor(imgs).unsqueeze(0).cuda(), torch.tensor(masks).unsqueeze(0).cuda()
+    )
+    depth = depth_net(
+        torch.tensor(imgs).unsqueeze(0).cuda(),
+        torch.tensor(masks).unsqueeze(0).cuda(),
+        normal,
+    )
 
+    import matplotlib.pyplot as plt
     import open3d as o3d
 
     depth = depth[0].detach().cpu().numpy()
-    depth[masks == 0] = np.inf
+    depth[masks == 0] = 0.0
+    gt_depth[masks == 0] = 0.0
 
-    u, v = np.where(depth != np.inf)
+    depth_unvalid = masks.astype(bool)
+    depth_unvalid = ~depth_unvalid
+    normal = depth_2_normal(
+        depth,
+        depth_unvalid,
+        np.array([[262.5, 0.0, 128.0], [0.0, 262.5, 128.0], [0.0, 0.0, 1.0]]),
+    )
+    normal_gt = depth_2_normal(
+        gt_depth,
+        depth_unvalid,
+        np.array([[262.5, 0.0, 128.0], [0.0, 262.5, 128.0], [0.0, 0.0, 1.0]]),
+    )
+
+    fig, ax = plt.subplots(1, 2)
+    ax[0].imshow(normal)
+    ax[1].imshow(normal_gt)
+    plt.show()
+
+    u, v = np.where(depth != 0.0)
     y = depth[u, v] * ((u - 128.0) / 262.5)
     x = depth[u, v] * ((v - 128.0) / 262.5)
     z = depth[u, v]
@@ -98,5 +152,14 @@ if __name__ == "__main__":
     pcd_part = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pts))
     pcd_part.paint_uniform_color(np.array([0, 1, 0]))
 
+    u, v = np.where(gt_depth != 0.0)
+    y = gt_depth[u, v] * ((u - 128.0) / 262.5)
+    x = gt_depth[u, v] * ((v - 128.0) / 262.5)
+    z = gt_depth[u, v]
+    pts = np.stack([x, y, z], axis=-1)
+
+    pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pts))
+    pcd.paint_uniform_color(np.array([1, 0, 0]))
+
     axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
-    o3d.visualization.draw_geometries([axis, pcd_part])
+    o3d.visualization.draw_geometries([pcd, axis, pcd_part])

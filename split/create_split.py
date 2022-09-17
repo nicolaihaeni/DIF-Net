@@ -1,10 +1,12 @@
 import os
 import json
 
-category_names = ["car", "chair", "plane", "table"]
+category_names = ["car", "chair", "plane"]
 for category_name in category_names:
-    train_file = f"/home/isleri/haeni001/code/DIF-Net/split/train/{category_name}.txt"
-    val_file = f"/home/isleri/haeni001/code/DIF-Net/split/eval/{category_name}.txt"
+    train_file = f"/home/nicolai/phd/code/DIF-Net/split/train/{category_name}.txt"
+    val_file = (
+        f"/home/nicolai/phd/code/DIF-Net/split/eval/shapenet_{category_name}_test.list"
+    )
 
     test_lines = []
     with open(val_file, "r") as f:
