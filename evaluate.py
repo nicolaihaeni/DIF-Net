@@ -73,6 +73,7 @@ file_names = utils.get_filenames(
 cam_poses = utils.sample_spherical(len(file_names))
 
 # optimize latent code for each test subject
+chamfer_dist, f1_score = [], []
 for ii, file in enumerate(file_names):
     print(file)
 
@@ -111,12 +112,11 @@ for ii, file in enumerate(file_names):
         **meta_params,
     )
 
-# calculate chamfer distance for each subject
-chamfer_dist, f1_score = [], []
-for file in file_names:
+    # calculate chamfer distance for each subject
     basename = os.path.basename(file).split(".")[0]
     recon_name = os.path.join(mesh_path, f"{basename}.ply")
-    cd, f1 = compute_recon_error(recon_name, file)
+    gt_points = sdf_dataset.coords
+    cd, f1 = compute_recon_error(recon_name, gt_points)
     chamfer_dist.append(cd)
     f1_score.append(f1)
 

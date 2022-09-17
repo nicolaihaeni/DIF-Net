@@ -54,14 +54,12 @@ def compute_f1(recon_pts, gt_pts, th=0.01):
     return fscore, precision, recall
 
 
-def compute_recon_error(recon_path, gt_path, num_pts=10000):
+def compute_recon_error(recon_path, gt_points):
     recon_mesh = trimesh.load(recon_path)
     if isinstance(recon_mesh, trimesh.Scene):
         recon_mesh = recon_mesh.dump().sum()
 
     recon_pts = np.array(trimesh.sample.sample_surface(recon_mesh, 100000)[0])
-    with h5py.File(gt_path, "r") as hf:
-        gt_pts = hf["surface_pts"][:, :3]
 
     # Normalize points
     recon_pts = normalize_pts(recon_pts)
