@@ -108,16 +108,23 @@ def get_filenames(root_dir, split_file, mode="train", depth=False):
         data = json.load(in_file)[mode]
 
     instances = []
-    for cat in data:
-        for filename in data[cat]:
-            if depth:
-                instances.append(
-                    os.path.join(root_dir, cat, filename, f"{filename}_rgbd.h5")
-                )
-            else:
-                instances.append(
-                    os.path.join(root_dir, cat, filename, f"{filename}.h5")
-                )
+    if mode == "train":
+        for cat in data:
+            for filename in data[cat]:
+                if depth:
+                    instances.append(
+                        os.path.join(root_dir, cat, filename, f"{filename}_rgbd.h5")
+                    )
+                else:
+                    instances.append(
+                        os.path.join(root_dir, cat, filename, f"{filename}.h5")
+                    )
+
+    else:
+        for cat in data:
+            for filename in data[cat]:
+                instances.append(os.path.join(root_dir, f"{filename}.h5"))
+
     return instances
 
 

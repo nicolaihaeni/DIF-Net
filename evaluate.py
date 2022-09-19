@@ -33,6 +33,9 @@ torch.manual_seed(0)
 
 p = configargparse.ArgumentParser()
 p.add_argument("--config", required=True, help="Evaluation configuration")
+p.add_argument(
+    "--use_gt_poses", action="store_true", help="Comparison using ground truth poses"
+)
 p.add_argument("--sym", action="store_true", help="Enforce symmetry")
 
 # load configs
@@ -61,7 +64,11 @@ experiment_path = os.path.join(
 utils.cond_mkdir(experiment_path)
 
 # create the output mesh directory
-mesh_path = os.path.join(experiment_path, "recon", "test")
+if use_gt_poses:
+    mesh_path = os.path.join(experiment_path, "recon", "test", "gt_pose")
+else:
+    mesh_path = os.path.join(experiment_path, "recon", "test", "est_pose")
+
 utils.cond_mkdir(mesh_path)
 meta_params["mesh_path"] = mesh_path
 
@@ -70,55 +77,62 @@ file_names = utils.get_filenames(
 )
 
 # Get camera poses for simulated dropout
-cam_poses = utils.sample_spherical(len(file_names))
+cam_poses = np.load(
+    os.path.join(meta_params["root_dir"], meta_params["camera_file"]),
+    allow_pickle=True,
+).item()
 
-# optimize latent code for each test subject
 chamfer_dist, f1_score = [], []
-for ii, file in enumerate(file_names):
-    print(file)
+for ii, filename in enumerate(file_names):
+    print(filename)
+    basename = os.path.basename(filename).split(".")[0]
+
+    # Get the right camera pose
+    index = cam_poses["names"].index(basename)
+    if opt.use_gt_poses:
+        cam_pose = cam_poses["gt_w_T_cam"][index]
+    else:
+        cam_pose = cam_poses["est_w_T_cam"][index]
 
     # if already embedded, pass
-    basename = os.path.basename(file).split(".")[0]
-    if os.path.isfile(os.path.join(mesh_path, f"{basename}.ply")):
-        print(f"File {basename}.ply exists. Skipping...")
-        continue
-
-    # load ground truth data
-    sdf_dataset = dataset.PointCloudMultiDataset(
-        file_names=[file],
-        cam_pose=cam_poses[ii],
-        symmetry=opt.sym,
-        **meta_params,
-    )
-
-    dataloader = DataLoader(
-        sdf_dataset,
-        shuffle=True,
-        collate_fn=sdf_dataset.collate_fn,
-        batch_size=1,
-        pin_memory=True,
-        num_workers=0,
-        drop_last=True,
-    )
-
-    # shape embedding
-    training_loop.train(
-        model=model,
-        train_dataloader=dataloader,
-        model_dir=experiment_path,
-        model_name=basename,
-        is_train=False,
-        dataset=sdf_dataset,
-        **meta_params,
-    )
-
-    # calculate chamfer distance for each subject
-    basename = os.path.basename(file).split(".")[0]
     recon_name = os.path.join(mesh_path, f"{basename}.ply")
-    gt_points = sdf_dataset.coords
-    cd, f1 = compute_recon_error(recon_name, gt_points)
-    chamfer_dist.append(cd)
-    f1_score.append(f1)
+    if os.path.isfile(recon_name):
+        print(f"File {basename}.ply exists. Skipping...")
+    else:
+        # load ground truth data
+        sdf_dataset = dataset.PointCloudEvalDataset(
+            input_file_name=filename,
+            cam_pose=gt_cam_pose,
+            on_surface_points=4000,
+            symmetry=False,
+        )
+
+        dataloader = DataLoader(
+            sdf_dataset,
+            shuffle=True,
+            batch_size=1,
+            pin_memory=True,
+            num_workers=0,
+            drop_last=True,
+        )
+
+        # shape embedding
+        training_loop.train(
+            model=model,
+            train_dataloader=dataloader,
+            model_dir=experiment_path,
+            model_name=basename,
+            is_train=False,
+            dataset=sdf_dataset,
+            **meta_params,
+        )
+
+        cd, f1 = compute_recon_error(
+            recon_name,
+            os.path.join(meta_params["gt_dir"], basename, f"{basename}.h5"),
+        )
+        chamfer_dist.append(cd)
+        f1_score.append(f1)
 
 print("Average Chamfer Distance:", 1e4 * np.mean(chamfer_dist))
 print("Average F1 Score @1:", np.mean(f1_score))

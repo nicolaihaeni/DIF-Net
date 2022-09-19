@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import open3d as o3d
 from pytorch3d.loss import chamfer_distance
+from pytorch3d.ops import sample_farthest_points
 
 
 def normalize_pts(pts):
@@ -54,24 +55,25 @@ def compute_f1(recon_pts, gt_pts, th=0.01):
     return fscore, precision, recall
 
 
-def compute_recon_error(recon_path, gt_points):
+def compute_recon_error(recon_path, gt_path, num_pts=10000):
     recon_mesh = trimesh.load(recon_path)
     if isinstance(recon_mesh, trimesh.Scene):
         recon_mesh = recon_mesh.dump().sum()
 
     recon_pts = np.array(trimesh.sample.sample_surface(recon_mesh, 100000)[0])
+    with h5py.File(gt_path, "r") as hf:
+        gt_pts = hf["surface_pts"][:, :3]
 
     # Normalize points
     recon_pts = normalize_pts(recon_pts)
     gt_pts = normalize_pts(gt_pts)
 
-    # Choose random subset
-    np.random.seed(0)
-    idx = np.random.choice(len(recon_pts), size=(num_pts), replace=True)
-    recon_pts = recon_pts[idx, :]
+    # downsample pts
+    pts, _ = sample_farthest_points(torch.Tensor(gt_pts).unsqueeze(0), K=num_pts)
+    gt_pts = pts.numpy()[0]
 
-    idx = np.random.choice(len(gt_pts), size=(num_pts), replace=True)
-    gt_pts = gt_pts[idx, :]
+    pts, _ = sample_farthest_points(torch.Tensor(recon_pts).unsqueeze(0), K=num_pts)
+    recon_pts = pts.numpy()[0]
 
     cd = compute_chamfer(recon_pts, gt_pts)
     f1, _, _ = compute_f1(recon_pts, gt_pts)

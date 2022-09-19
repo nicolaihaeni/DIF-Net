@@ -166,21 +166,6 @@ def train(
                 get_color=False,
             )
 
-            # Save the ground truth and partial point cloud to files
-            partial_pcd, gt_pcd = dataset.get_point_clouds(0)
-            sdf_meshing.save_poincloud_ply(
-                gt_pcd,
-                model,
-                embedding,
-                os.path.join(mesh_path, f"{model_name}_gt.ply"),
-            )
-            sdf_meshing.save_poincloud_ply(
-                partial_pcd,
-                model,
-                embedding,
-                os.path.join(mesh_path, f"{model_name}_partial.ply"),
-            )
-
         np.savetxt(
             os.path.join(checkpoints_dir, "train_losses_final.txt"),
             np.array(train_losses),
