@@ -8,7 +8,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import depth_2_normal
+from pytorch3d.structures import Pointclouds
+from pytorch3d.loss.chamfer import chamfer_distance
+
+from utils import depth_2_normal, lift_2d_to_3d
 
 
 def deform_implicit_loss(
@@ -129,12 +132,12 @@ def compute_depth_normal_loss(depth_pred, normal_pred, depth_gt):
 
     loss_depth = depth_loss(depth_pred[is_fg], depth_gt[is_fg])
     loss_norm = cosine_loss(normal_d[is_fg], normal_gt[is_fg])
-    loss_refine = refined_loss(depth_pred[is_fg], depth_gt[is_fg])
+    loss_chamfer = chamfer_loss(depth_pred, depth_gt)
 
     return {
         "depth_loss": 2 * loss_depth,
         "normal_loss": loss_norm,
-        "refined_loss": loss_refine,
+        "chamfer_loss": loss_chamfer,
     }
 
 
@@ -154,17 +157,14 @@ def cosine_loss(normal_pred, normal_gt):
     return normal_loss
 
 
-def refined_loss(depth, depth_gt):
-    gt_max = torch.max(depth_gt)
+def chamfer_loss(depth, depth_gt):
+    pcd, pcd_gt = [], []
+    for ii in range(depth_gt.shape[0]):
+        pcd.append(lift_2d_to_3d(depth[ii]))
+        pcd_gt.append(lift_2d_to_3d(depth_gt[ii]))
 
-    pred_max = torch.max(depth)
-    pred_min = torch.min(depth)
+    pcd = Pointclouds(pcd)
+    pcd_gt = Pointclouds(pcd_gt)
 
-    # Normalize depth
-    depth = gt_max * (depth - pred_min) / (pred_max - pred_min)
-
-    d = depth - depth_gt
-    a1 = torch.sum(d**2)
-    a2 = torch.sum(d) ** 2
-    length = d.shape[0]
-    return torch.mean(torch.div(a1, length) - (0.5 * torch.div(a2, length**2)))
+    cd, _ = chamfer_distance(pcd, pcd_gt)
+    return cd

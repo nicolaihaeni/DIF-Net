@@ -189,3 +189,15 @@ def initialize_weights(m):
     if isinstance(m, nn.Conv2d):
         if m.bias is not None:
             nn.init.constant_(m.bias.data, 0)
+
+
+def lift_2d_to_3d(depth):
+    fx, fy = 262.5, 262.5
+    cx, cy = 128.0, 128.0
+
+    u, v = torch.where(depth != 0.0)
+    y = depth[u, v] * ((u - cy) / fy)
+    x = depth[u, v] * ((v - cx) / fx)
+    z = depth[u, v]
+    pts = torch.stack([x, y, z], axis=-1)
+    return pts
