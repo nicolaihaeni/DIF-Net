@@ -208,3 +208,31 @@ def lift_2d_to_3d(depth):
     z = depth[u, v]
     pts = torch.stack([x, y, z], axis=-1)
     return pts
+
+
+def normalize_vector(vector):
+    return vector / torch.linalg.norm(vector)
+
+
+def rotvec_2_mat(ortho6d):
+    x_raw = ortho6d[:3]
+    y_raw = ortho6d[3:]
+
+    x = normalize_vector(x_raw)
+    z = torch.cross(x, y_raw)
+    z = normalize_vector(z)
+    y = torch.cross(z, x)
+
+    x = x.view(3, 1)
+    y = y.view(3, 1)
+    z = z.view(3, 1)
+    matrix = torch.cat((x, y, z), -1)  # 3*3
+    return matrix
+
+
+def apply_rotation_translation(coords, rotation, translation):
+    rot_mat = rotvec_2_mat(rotation)
+
+    # apply rotation
+    rot_coords = rot_mat.unsqueeze(0) @ coords.permute(0, 2, 1)
+    return rot_coords.permute(0, 2, 1) + translation

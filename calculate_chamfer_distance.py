@@ -8,7 +8,6 @@ import os
 import h5py
 import trimesh
 import numpy as np
-
 import torch
 import open3d as o3d
 from pytorch3d.loss import chamfer_distance
@@ -126,13 +125,13 @@ def compute_recon_error(recon_path, gt_path, num_pts=10000):
     # downsample pts
     pts, _ = sample_farthest_points(torch.Tensor(gt_pts).unsqueeze(0).cuda(), K=num_pts)
     gt_pts = pts.cpu().numpy()[0]
-    gt_pts.axis_align(gt_pts)
+    gt_pts = axis_align(gt_pts)
 
     pts, _ = sample_farthest_points(
         torch.Tensor(recon_pts).unsqueeze(0).cuda(), K=num_pts
     )
     recon_pts = pts.cpu().numpy()[0]
-    recon_pts.axis_align(recon_pts)
+    recon_pts = axis_align(recon_pts)
 
     cd = compute_chamfer(recon_pts, gt_pts)
     f1, _, _ = compute_f1(recon_pts, gt_pts)

@@ -9,6 +9,7 @@ from torch import nn
 import modules
 from meta_modules import HyperNetwork
 from loss import *
+from utils import apply_rotation_translation
 
 
 class DeformedImplicitField(nn.Module):
@@ -183,8 +184,10 @@ class DeformedImplicitField(nn.Module):
         return losses
 
     # for evaluation
-    def embedding(self, embed, translation, model_input, gt):
-        model_input["coords"] = model_input["coords"] + translation
+    def embedding(self, embed, translation, rotation, model_input, gt):
+        model_input["coords"] = apply_rotation_translation(
+            model_input["coords"], rotation, translation
+        )
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
         # get network weights for Deform-net using Hyper-net

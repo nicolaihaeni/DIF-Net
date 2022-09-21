@@ -59,8 +59,14 @@ def train(
         translation = torch.Tensor([0.0, 0.0, 0.0]).float().cuda()
         translation.requires_grad = True
 
+        rotation = torch.Tensor([1.0, 0.0, 0.0, 0.0, 1.0, 0.0]).float().cuda()
+        rotation.requires_grad = True
         optim = torch.optim.Adam(
-            [{"params": [embedding], "lr": lr}, {"params": [translation], "lr": 0.01}],
+            [
+                {"params": [embedding], "lr": lr},
+                {"params": [translation], "lr": 0.01},
+                {"params": [rotation], "lr": lr},
+            ],
             lr=lr,
         )
 
@@ -113,7 +119,9 @@ def train(
                 if is_train:
                     losses = model(model_input, gt, **kwargs)
                 else:
-                    losses = model.embedding(embedding, translation, model_input, gt)
+                    losses = model.embedding(
+                        embedding, translation, rotation, model_input, gt
+                    )
 
                 train_loss = 0.0
                 for loss_name, loss in losses.items():
