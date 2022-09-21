@@ -11,7 +11,7 @@ import numpy as np
 
 import torch
 import open3d as o3d
-from pytorch3d.loss import chamfer_distance
+from pytorch4d.loss import chamfer_distance
 from pytorch3d.ops import sample_farthest_points
 
 
@@ -22,6 +22,61 @@ def normalize_pts(pts):
     dist = np.linalg.norm(pts, axis=1)
     pts /= np.max(dist * 2)  # align in a sphere with diameter equal to 1
     return pts
+
+
+def axis_align(pts):
+    U, S, Vt = svd_sign_flip(pts)
+    return pts @ Vt.T
+
+
+def svd_sign_flip(X):
+    """
+    SVD with corrected signs
+
+    Bro, R., Acar, E., & Kolda, T. G. (2008). Resolving the sign ambiguity in the singular value decomposition.
+    Journal of Chemometrics: A Journal of the Chemometrics Society, 22(2), 135-140.
+    URL: https://prod-ng.sandia.gov/techlib-noauth/access-control.cgi/2007/076422.pdf
+    """
+    # SDV dimensions:
+    # U, S, V = np.linalg.svd(X, full_matrices=False)
+    # X = U @ diag(S) @ V
+    # (I,J) = (I,K) @ (K,K) @ (K,J)
+
+    U, S, V = np.linalg.svd(X, full_matrices=False)
+
+    I = U.shape[0]
+    J = V.shape[1]
+    K = S.shape[0]
+
+    assert U.shape == (I, K)
+    assert V.shape == (K, J)
+    assert X.shape == (I, J)
+
+    s = {"left": np.zeros(K), "right": np.zeros(K)}
+
+    for k in range(K):
+        mask = np.ones(K).astype(bool)
+        mask[k] = False
+        # (I,J) = (I,K-1) @ (K-1,K-1) @ (K-1,J)
+        Y = X - (U[:, mask] @ np.diag(S[mask]) @ V[mask, :])
+
+        for j in range(J):
+            d = np.dot(U[:, k], Y[:, j])
+            s["left"][k] += np.sum(np.sign(d) * d**2)
+        for i in range(I):
+            d = np.dot(V[k, :], Y[i, :])
+            s["right"][k] += np.sum(np.sign(d) * d**2)
+
+    for k in range(K):
+        if (s["left"][k] * s["right"][k]) < 0:
+            if np.abs(s["left"][k]) < np.abs(s["right"][k]):
+                s["left"][k] = -s["left"][k]
+            else:
+                s["right"][k] = -s["right"][k]
+        U[:, k] = U[:, k] * np.sign(s["left"][k])
+        V[k, :] = V[k, :] * np.sign(s["right"][k])
+
+    return U, S, V
 
 
 def compute_chamfer(recon_pts, gt_pts):
@@ -69,11 +124,15 @@ def compute_recon_error(recon_path, gt_path, num_pts=10000):
     gt_pts = normalize_pts(gt_pts)
 
     # downsample pts
-    pts, _ = sample_farthest_points(torch.Tensor(gt_pts).unsqueeze(0), K=num_pts)
-    gt_pts = pts.numpy()[0]
+    pts, _ = sample_farthest_points(torch.Tensor(gt_pts).unsqueeze(0).cuda(), K=num_pts)
+    gt_pts = pts.cpu().numpy()[0]
+    gt_pts.axis_align(gt_pts)
 
-    pts, _ = sample_farthest_points(torch.Tensor(recon_pts).unsqueeze(0), K=num_pts)
-    recon_pts = pts.numpy()[0]
+    pts, _ = sample_farthest_points(
+        torch.Tensor(recon_pts).unsqueeze(0).cuda(), K=num_pts
+    )
+    recon_pts = pts.cpu().numpy()[0]
+    recon_pts.axis_align(recon_pts)
 
     cd = compute_chamfer(recon_pts, gt_pts)
     f1, _, _ = compute_f1(recon_pts, gt_pts)
