@@ -1,9 +1,9 @@
 experiment_name: 'plane_eval'
 checkpoint_path: 'models/plane/checkpoints/model_epoch_0060.pth'
-root_dir: /home/nicolai/phd/data/test_data/shapenet_plane_test/
-gt_dir: /home/nicolai/phd/data/dif/
+root_dir: /home/isleri/shared/test_data/shapenet_plane_test/
+gt_dir: /home/isleri/haeni001/data/dif/plane
 split_file: split/plane.json
-camera_file: shapenet_plane_pose.npy 
+camera_file: shapenet_plane_equi_pose.npy 
 logging_root: ./logs
 
 batch_size: 1

@@ -4,12 +4,13 @@
 """
 
 import sys
+import io
 import os
+import csv
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import yaml
-import io
 import random
 import numpy as np
 import dataset, utils, training_loop, loss, modules, meta_modules
@@ -18,7 +19,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 import configargparse
-import sdf_meshing
 from dif_net import DeformedImplicitField
 from calculate_chamfer_distance import compute_recon_error
 
@@ -64,10 +64,10 @@ experiment_path = os.path.join(
 utils.cond_mkdir(experiment_path)
 
 # create the output mesh directory
-if use_gt_poses:
+if opt.use_gt_poses:
     mesh_path = os.path.join(experiment_path, "recon", "test", "gt_pose")
 else:
-    mesh_path = os.path.join(experiment_path, "recon", "test", "est_pose")
+    mesh_path = os.path.join(experiment_path, "recon", "test", "equi_pose")
 
 utils.cond_mkdir(mesh_path)
 meta_params["mesh_path"] = mesh_path
@@ -82,7 +82,8 @@ cam_poses = np.load(
     allow_pickle=True,
 ).item()
 
-chamfer_dist, f1_score = [], []
+cvs_columns = ["name", "chamfer", "f1"]
+dict_data = []
 for ii, filename in enumerate(file_names):
     print(filename)
     basename = os.path.basename(filename).split(".")[0]
@@ -102,7 +103,7 @@ for ii, filename in enumerate(file_names):
         # load ground truth data
         sdf_dataset = dataset.PointCloudEvalDataset(
             input_file_name=filename,
-            cam_pose=gt_cam_pose,
+            cam_pose=cam_pose,
             on_surface_points=4000,
             symmetry=False,
         )
@@ -117,6 +118,7 @@ for ii, filename in enumerate(file_names):
         )
 
         # shape embedding
+        gt_path = os.path.join(meta_params["gt_dir"], basename, f"{basename}.h5")
         training_loop.train(
             model=model,
             train_dataloader=dataloader,
@@ -124,15 +126,25 @@ for ii, filename in enumerate(file_names):
             model_name=basename,
             is_train=False,
             dataset=sdf_dataset,
+            gt_path=gt_path,
             **meta_params,
         )
 
-        cd, f1 = compute_recon_error(
-            recon_name,
-            os.path.join(meta_params["gt_dir"], basename, f"{basename}.h5"),
-        )
-        chamfer_dist.append(cd)
-        f1_score.append(f1)
+for ii, filename in enumerate(file_names):
+    print(filename)
+    basename = os.path.basename(filename).split(".")[0]
 
-print("Average Chamfer Distance:", 1e4 * np.mean(chamfer_dist))
-print("Average F1 Score @1:", np.mean(f1_score))
+    gt_path = os.path.join(meta_params["gt_dir"], basename, f"{basename}.h5")
+    cd, f1 = compute_recon_error(recon_name, gt_path)
+    dict_data.append({"name": filename, "chamfer": cd, "f1": f1})
+
+chamfer = [f["chamfer"] for f in dict_data]
+f1 = [f["f1"] for f in dict_data]
+print("Average Chamfer Distance:", 1e4 * np.mean(np.array(chamfer)))
+print("Average F1 Score @1:", np.mean(np.array(f1)))
+
+with open(os.path.join(mesh_path, "output_metrics.csv"), "w") as csv_file:
+    writer = csv.DictWriter(csv_file, fieldnames=cvs_columns)
+    writer.writeheader()
+    for data in dict_data:
+        writer.writerow(data)

@@ -68,9 +68,7 @@ class DeformedImplicitField(nn.Module):
         return hypo_params, embedding
 
     def get_latent_code(self, instance_idx):
-
         embedding = self.latent_codes(instance_idx)
-
         return embedding
 
     # for generation
@@ -185,7 +183,8 @@ class DeformedImplicitField(nn.Module):
         return losses
 
     # for evaluation
-    def embedding(self, embed, model_input, gt):
+    def embedding(self, embed, translation, model_input, gt):
+        model_input["coords"] = model_input["coords"] + translation
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
         # get network weights for Deform-net using Hyper-net
@@ -219,6 +218,7 @@ class DeformedImplicitField(nn.Module):
             "model_out": sdf_final,
             "latent_vec": embed,
             "grad_sdf": grad_sdf,
+            "translation": translation,
         }
         losses = embedding_loss(model_out, gt)
 

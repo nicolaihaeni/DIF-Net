@@ -3,13 +3,16 @@
 
 """Main training loop for DIF-Net.
 """
-import torch
-import utils
-from torch.utils.tensorboard import SummaryWriter
-from tqdm.autonotebook import tqdm
+import os
 import time
 import numpy as np
-import os
+from tqdm.autonotebook import tqdm
+
+import torch
+import torch.nn as nn
+from torch.utils.tensorboard import SummaryWriter
+
+import utils
 import sdf_meshing
 from utils import save_checkpoints, to_png, depth_to_png, depth_2_normal
 from loss import compute_depth_normal_loss, compute_normal_loss
@@ -30,6 +33,7 @@ def train(
     dataset=None,
     mesh_path=None,
     start_epoch=0,
+    gt_path=None,
     **kwargs,
 ):
 
@@ -50,7 +54,15 @@ def train(
             model.latent_codes(torch.zeros(1).long().cuda()).clone().detach()
         )  # initialization for evaluation stage
         embedding.requires_grad = True
-        optim = torch.optim.Adam(lr=lr, params=[embedding])
+
+        # Also optimize model translations
+        translation = torch.Tensor([0.0, 0.0, 0.0]).float().cuda()
+        translation.requires_grad = True
+
+        optim = torch.optim.Adam(
+            [{"params": [embedding], "lr": lr}, {"params": [translation], "lr": 0.01}],
+            lr=lr,
+        )
 
     if not os.path.isdir(model_dir):
         os.makedirs(model_dir)
@@ -101,7 +113,7 @@ def train(
                 if is_train:
                     losses = model(model_input, gt, **kwargs)
                 else:
-                    losses = model.embedding(embedding, model_input, gt)
+                    losses = model.embedding(embedding, translation, model_input, gt)
 
                 train_loss = 0.0
                 for loss_name, loss in losses.items():
@@ -164,6 +176,37 @@ def train(
                 N=256,
                 level=0,
                 get_color=False,
+            )
+
+            # Load ground truth points and save before/after input point clouds
+            import h5py
+            import open3d as o3d
+
+            with h5py.File(gt_path, "r") as hf:
+                gt_pts = hf["surface_pts"][:, :3]
+
+            partial_pts = train_dataloader.dataset.partial
+
+            gt_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_pts))
+            gt_pcd.paint_uniform_color([1, 0, 0])
+
+            o3d.io.write_point_cloud(
+                os.path.join(mesh_path, f"{model_name}_gt.ply"), gt_pcd
+            )
+
+            pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(partial_pts))
+            pcd.paint_uniform_color([0, 1, 0])
+
+            o3d.io.write_point_cloud(
+                os.path.join(mesh_path, f"{model_name}_before.ply"), pcd
+            )
+
+            # Translate the point cloud
+            translation = translation.detach().cpu().numpy()
+            pcd.translate(translation)
+            pcd.paint_uniform_color([0, 0, 1])
+            o3d.io.write_point_cloud(
+                os.path.join(mesh_path, f"{model_name}_after.ply"), pcd
             )
 
         np.savetxt(
