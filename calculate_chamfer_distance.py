@@ -11,7 +11,7 @@ import numpy as np
 
 import torch
 import open3d as o3d
-from pytorch4d.loss import chamfer_distance
+from pytorch3d.loss import chamfer_distance
 from pytorch3d.ops import sample_farthest_points
 
 
