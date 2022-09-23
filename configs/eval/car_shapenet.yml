@@ -1,5 +1,4 @@
 experiment_name: 'car_eval'
-dataset: 'shapenet'
 checkpoint_path: 'models/car/checkpoints/model_epoch_0060.pth'
 root_dir: /home/isleri/shared/test_data/shapenet_car_test/
 gt_dir: /home/isleri/haeni001/data/dif/car
