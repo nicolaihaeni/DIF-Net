@@ -13,6 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import yaml
 import random
 import numpy as np
+from datasets.dataset import get_dataset
 import dataset, utils, training_loop, loss, modules, meta_modules
 
 import torch
@@ -66,8 +67,10 @@ utils.cond_mkdir(experiment_path)
 # create the output mesh directory
 if opt.use_gt_poses:
     mesh_path = os.path.join(experiment_path, "recon", "test", "gt_pose")
-else:
+elif "equi" in meta_params["camera_file"]:
     mesh_path = os.path.join(experiment_path, "recon", "test", "equi_pose")
+else:
+    mesh_path = os.path.join(experiment_path, "recon", "test", "ours_pose")
 
 utils.cond_mkdir(mesh_path)
 meta_params["mesh_path"] = mesh_path
@@ -135,6 +138,7 @@ for ii, filename in enumerate(file_names):
     basename = os.path.basename(filename).split(".")[0]
 
     gt_path = os.path.join(meta_params["gt_dir"], basename, f"{basename}.h5")
+    recon_name = os.path.join(mesh_path, f"{basename}.ply")
     cd, f1 = compute_recon_error(recon_name, gt_path)
     dict_data.append({"name": filename, "chamfer": cd, "f1": f1})
 
@@ -142,6 +146,13 @@ chamfer = [f["chamfer"] for f in dict_data]
 f1 = [f["f1"] for f in dict_data]
 print("Average Chamfer Distance:", 1e4 * np.mean(np.array(chamfer)))
 print("Average F1 Score @1:", np.mean(np.array(f1)))
+dict_data.append(
+    {
+        "name": "Total",
+        "chamfer": 1e4 * np.mean(np.array(chamfer)),
+        "f1": np.mean(np.array(f1)),
+    }
+)
 
 with open(os.path.join(mesh_path, "output_metrics.csv"), "w") as csv_file:
     writer = csv.DictWriter(csv_file, fieldnames=cvs_columns)

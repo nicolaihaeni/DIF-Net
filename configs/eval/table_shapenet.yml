@@ -1,7 +1,8 @@
-experiment_name: 'chair_partial'
-checkpoint_path: 'models/chair/checkpoints/model_epoch_0060.pth'
-root_dir: /home/isleri/haeni001/data/dif/chair/
-split_file: split/chair.json
+experiment_name: 'table_partial'
+dataset: 'shapenet'
+checkpoint_path: 'models/table/checkpoints/model_epoch_0060.pth'
+root_dir: /home/isleri/haeni001/data/dif/table/
+split_file: split/table.json
 logging_root: ./logs
 
 batch_size: 1

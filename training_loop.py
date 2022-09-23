@@ -65,7 +65,7 @@ def train(
             [
                 {"params": [embedding], "lr": lr},
                 {"params": [translation], "lr": 0.01},
-                {"params": [rotation], "lr": lr},
+                {"params": [rotation], "lr": 0.1},
             ],
             lr=lr,
         )

@@ -1,7 +1,10 @@
-experiment_name: 'car_partial'
+experiment_name: 'car_eval'
+dataset: 'shapenet'
 checkpoint_path: 'models/car/checkpoints/model_epoch_0060.pth'
-root_dir: /home/isleri/haeni001/data/dif/car/
+root_dir: /home/isleri/shared/test_data/shapenet_car_test/
+gt_dir: /home/isleri/haeni001/data/dif/car
 split_file: split/car.json
+camera_file: shapenet_car_equi_pose.npy 
 logging_root: ./logs
 
 batch_size: 1
