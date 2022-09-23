@@ -9,6 +9,37 @@ from pytorch3d.loss import chamfer_distance
 from pytorch3d.ops import sample_farthest_points
 
 
+def compute_chamfer(recon_pts, gt_pts):
+    with torch.no_grad():
+        recon_pts = torch.from_numpy(recon_pts).float().cuda()[None, ...]
+        gt_pts = torch.from_numpy(gt_pts).float().cuda()[None, ...]
+        dist, _ = chamfer_distance(recon_pts, gt_pts, batch_reduction=None)
+        dist = dist.detach().cpu().squeeze().numpy()
+    return dist
+
+
+def compute_f1(recon_pts, gt_pts, th=0.01):
+    gt_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_pts))
+    recon_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(recon_pts))
+    d1 = gt_pcd.compute_point_cloud_distance(recon_pcd)
+    d2 = recon_pcd.compute_point_cloud_distance(gt_pcd)
+
+    if len(d1) and len(d2):
+        recall = float(sum(d < th for d in d2)) / float(len(d2))
+        precision = float(sum(d < th for d in d1)) / float(len(d1))
+
+        if recall + precision > 0:
+            fscore = 2 * recall * precision / (recall + precision)
+        else:
+            fscore = 0
+    else:
+        fscore = 0
+        precision = 0
+        recall = 0
+
+    return fscore, precision, recall
+
+
 def normalize_pts(pts):
     # pts [N,3]
     center = np.mean(pts, 0)
@@ -74,10 +105,14 @@ def svd_sign_flip(X):
 
 
 pred_path = "/home/nicolai/phd/code/DIF-Net/logs/plane_eval/recon/test/equi_pose/dfdcc024d1043c73d5dc0e7cb9b4e7b6.ply"
+tars_path = "/home/nicolai/phd/code/DIF-Net/logs/plane_eval/recon/test/TARS/TARS_95_dfdcc024d1043c73d5dc0e7cb9b4e7b6_11_pts.npy"
+sdf_srn_path = "/home/nicolai/phd/code/DIF-Net/logs/plane_eval/recon/test/SDF_SRN/SRN-SDF_95_dfdcc024d1043c73d5dc0e7cb9b4e7b6_95_11_pts.npy"
+# gt_path = "/home/nicolai/phd/code/DIF-Net/logs/plane_eval/recon/test/equi_pose/dfdcc024d1043c73d5dc0e7cb9b4e7b6_gt.ply"
 gt_path = "./dfdcc024d1043c73d5dc0e7cb9b4e7b6.h5"
 
-hf = h5py.File(gt_path, "r")
-gt_pts = hf["surface_pts"][:, :3]
+# gt_pts = np.array(trimesh.load(gt_path).vertices)
+with h5py.File(gt_path, "r") as hf:
+    gt_pts = hf["surface_pts"][:, :3]
 
 mesh = trimesh.load(pred_path)
 recon_pts = np.array(trimesh.sample.sample_surface(mesh, 100000)[0])
@@ -99,6 +134,7 @@ gt_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_pts))
 gt_pcd.paint_uniform_color([1, 0, 0])
 
 pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(recon_pts))
+pcd.translate(np.array([0.0, 1.0, 0.0]))
 pcd.paint_uniform_color([0, 1, 0])
 
 axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
