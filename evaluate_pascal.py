@@ -13,7 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import yaml
 import random
 import numpy as np
-from datasets.shapenet import ShapenetEvalDataset
+from datasets.pascal3d import Pascal3dDataset
 import utils, training_loop, loss, modules, meta_modules
 
 import torch
@@ -37,7 +37,7 @@ p.add_argument("--config", required=True, help="Evaluation configuration")
 p.add_argument(
     "--use_gt_poses", action="store_true", help="Comparison using ground truth poses"
 )
-p.add_argument("--sym", action="store_true", help="Enforce symmetry")
+# p.add_argument("--sym", action="store_true", help="Enforce symmetry")
 
 # load configs
 opt = p.parse_args()
@@ -75,8 +75,8 @@ else:
 utils.cond_mkdir(mesh_path)
 meta_params["mesh_path"] = mesh_path
 
-file_names = utils.get_filenames(
-    meta_params["root_dir"], meta_params["split_file"], mode="test"
+file_names = utils.get_pascal_filenames(
+    os.path.join(meta_params["root_dir"], 'partial'
 )
 
 # Get camera poses for simulated dropout

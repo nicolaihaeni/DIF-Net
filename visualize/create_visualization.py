@@ -16,4 +16,4 @@ pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
 
 _, pt_map = pcd.hidden_point_removal(np.array([-1, -1, 0]), radius=100)
 pcd = pcd.select_by_index(pt_map)
-o3d.visualization.draw_geometries([pcd])
+o3d.visualization.draw_geometries([pcd, frame])

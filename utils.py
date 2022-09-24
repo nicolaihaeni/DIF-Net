@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import os
+import glob
 import json
 import numpy as np
 
@@ -126,6 +127,11 @@ def get_filenames(root_dir, split_file, mode="train", depth=False):
                 instances.append(os.path.join(root_dir, f"{filename}.h5"))
 
     return instances
+
+
+def get_pascal_filenames(directory):
+    filennames = glob.glob(directory)
+    return filennames
 
 
 def normalize(vec):
