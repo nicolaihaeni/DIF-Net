@@ -97,6 +97,26 @@ class Pascal3dDataset(Dataset):
 
 
 if __name__ == "__main__":
+
+    def rotate_pascal3d_to_shapenet():
+        rot_x = np.array(
+            [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0, 0.0],
+                [0.0, 0.0, -1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+        rot_y = np.array(
+            [
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+        return rot_x @ rot_y
+
     cam_poses = np.load(
         "/home/nicolai/phd/data/test_data/pascal3d_car/pascal3d_car_equi_pose.npy",
         allow_pickle=True,
@@ -107,7 +127,7 @@ if __name__ == "__main__":
     index = cam_poses["names"].index(basename)
     cam_pose = cam_poses["est_w_T_cam"][index]
     rot_x = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
-    pred_cam_pose = rot_x @ cam_pose
+    pred_cam_pose = rot_x @ rotate_pascal3d_to_shapenet() @ cam_pose
 
     with h5py.File(
         "/home/nicolai/phd/data/test_data/pascal3d_car/pascal3d_imagenet_car_val.h5",
@@ -131,6 +151,7 @@ if __name__ == "__main__":
 
     surface_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_points))
     surface_pcd.paint_uniform_color(np.array([1, 0, 0]))
+    surface_pcd.transform(rotate_pascal3d_to_shapenet())
 
     partial_points = sdf_dataset.partial
     partial_normals = sdf_dataset.normals
