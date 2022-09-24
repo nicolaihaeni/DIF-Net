@@ -1,9 +1,8 @@
-experiment_name: 'car_pascal_eval'
+experiment_name: 'car_pascal3d_eval'
 checkpoint_path: 'models/car/checkpoints/model_epoch_0060.pth'
-root_dir: /home/isleri/shared/test_data/pascal
-gt_dir: /home/isleri/haeni001/data/dif/car
-split_file: split/car.json
-camera_file: shapenet_car_equi_pose.npy 
+root_dir: /home/isleri/shared/test_data/pascal3d_car/
+gt_dir: /home/isleri/shared/test_data/pascal3d_car/pascal3d_imagenet_car_val.h5
+camera_file: pascal3d_car_equi_pose.npy
 logging_root: ./logs
 
 batch_size: 1

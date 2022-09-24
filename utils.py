@@ -130,7 +130,9 @@ def get_filenames(root_dir, split_file, mode="train", depth=False):
 
 
 def get_pascal_filenames(directory):
-    filennames = glob.glob(directory)
+    filennames = [
+        os.path.join(directory, f) for f in sorted(os.listdir(directory)) if ".h5" in f
+    ]
     return filennames
 
 

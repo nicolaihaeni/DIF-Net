@@ -3,13 +3,14 @@
 """Evaluation script for DIF-Net.
 """
 
-import sys
 import io
 import os
+import sys
 import csv
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import h5py
 import yaml
 import random
 import numpy as np
@@ -122,6 +123,9 @@ for ii, filename in enumerate(file_names):
 
         # shape embedding
         gt_path = os.path.join(meta_params["gt_dir"], basename, f"{basename}.h5")
+        with h5py.File(gt_path, "r") as hf:
+            gt_pts = hf["surface_pts"][:, :3]
+
         training_loop.train(
             model=model,
             train_dataloader=dataloader,
@@ -129,7 +133,7 @@ for ii, filename in enumerate(file_names):
             model_name=basename,
             is_train=False,
             dataset=sdf_dataset,
-            gt_path=gt_path,
+            gt_points=gt_pts,
             **meta_params,
         )
 

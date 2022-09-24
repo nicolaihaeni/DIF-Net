@@ -3,13 +3,14 @@
 """Evaluation script for DIF-Net.
 """
 
-import sys
 import io
 import os
+import sys
 import csv
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import h5py
 import yaml
 import random
 import numpy as np
@@ -21,7 +22,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 import configargparse
 from dif_net import DeformedImplicitField
-from calculate_chamfer_distance import compute_recon_error
+from calculate_chamfer_distance import compute_recon_error_pts
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -76,7 +77,7 @@ utils.cond_mkdir(mesh_path)
 meta_params["mesh_path"] = mesh_path
 
 file_names = utils.get_pascal_filenames(
-    os.path.join(meta_params["root_dir"], 'partial'
+    os.path.join(meta_params["root_dir"], "partials")
 )
 
 # Get camera poses for simulated dropout
@@ -92,11 +93,19 @@ for ii, filename in enumerate(file_names):
     basename = os.path.basename(filename).split(".")[0]
 
     # Get the right camera pose
-    index = cam_poses["names"].index(basename)
+    with h5py.File(meta_params["gt_dir"]) as hf:
+        names = hf["Names"][:].tolist()
+        names = [f[0].decode()[1:] for f in names]
+        index = names.index(basename)
+        gt_points = hf["points"][index][:, :3]
+        gt_cam_pose = hf["poses"][index]
+
     if opt.use_gt_poses:
-        cam_pose = cam_poses["gt_w_T_cam"][index]
+        cam_pose = np.linalg.inv(gt_cam_pose)
     else:
-        cam_pose = cam_poses["est_w_T_cam"][index]
+        index = cam_poses["names"].index(basename)
+        rot_x = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+        cam_pose = rot_x @ cam_poses["est_w_T_cam"][index]
 
     # if already embedded, pass
     recon_name = os.path.join(mesh_path, f"{basename}.ply")
@@ -104,7 +113,7 @@ for ii, filename in enumerate(file_names):
         print(f"File {basename}.ply exists. Skipping...")
     else:
         # load ground truth data
-        sdf_dataset = ShapenetEvalDataset(
+        sdf_dataset = Pascal3dDataset(
             input_file_name=filename,
             cam_pose=cam_pose,
             on_surface_points=4000,
@@ -121,7 +130,6 @@ for ii, filename in enumerate(file_names):
         )
 
         # shape embedding
-        gt_path = os.path.join(meta_params["gt_dir"], basename, f"{basename}.h5")
         training_loop.train(
             model=model,
             train_dataloader=dataloader,
@@ -129,7 +137,7 @@ for ii, filename in enumerate(file_names):
             model_name=basename,
             is_train=False,
             dataset=sdf_dataset,
-            gt_path=gt_path,
+            gt_points=gt_points,
             **meta_params,
         )
 
@@ -137,9 +145,14 @@ for ii, filename in enumerate(file_names):
     print(filename)
     basename = os.path.basename(filename).split(".")[0]
 
-    gt_path = os.path.join(meta_params["gt_dir"], basename, f"{basename}.h5")
+    with h5py.File(meta_params["gt_dir"]) as hf:
+        names = hf["Names"][:].tolist()
+        names = [f[0].decode()[1:] for f in names]
+        index = names.index(basename)
+        gt_points = hf["points"][index][:, :3]
+
     recon_name = os.path.join(mesh_path, f"{basename}.ply")
-    cd, f1 = compute_recon_error(recon_name, gt_path)
+    cd, f1 = compute_recon_error_pts(recon_name, gt_points)
     dict_data.append({"name": filename, "chamfer": cd, "f1": f1})
 
 chamfer = [f["chamfer"] for f in dict_data]

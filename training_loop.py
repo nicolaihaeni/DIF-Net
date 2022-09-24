@@ -33,7 +33,7 @@ def train(
     dataset=None,
     mesh_path=None,
     start_epoch=0,
-    gt_path=None,
+    gt_points=None,
     **kwargs,
 ):
 
@@ -65,7 +65,7 @@ def train(
             [
                 {"params": [embedding], "lr": lr},
                 {"params": [translation], "lr": 0.01},
-                {"params": [rotation], "lr": 0.1},
+                {"params": [rotation], "lr": 0.01},
             ],
             lr=lr,
         )
@@ -190,12 +190,8 @@ def train(
             import h5py
             import open3d as o3d
 
-            with h5py.File(gt_path, "r") as hf:
-                gt_pts = hf["surface_pts"][:, :3]
-
             partial_pts = train_dataloader.dataset.partial
-
-            gt_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_pts))
+            gt_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_points))
             gt_pcd.paint_uniform_color([1, 0, 0])
 
             o3d.io.write_point_cloud(

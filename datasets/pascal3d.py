@@ -147,8 +147,6 @@ if __name__ == "__main__":
     )
 
     # Recreate the point clouds and check if they align
-    import open3d as o3d
-
     surface_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_points))
     surface_pcd.paint_uniform_color(np.array([1, 0, 0]))
     surface_pcd.transform(rotate_pascal3d_to_shapenet())

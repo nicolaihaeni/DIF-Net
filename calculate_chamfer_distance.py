@@ -136,3 +136,30 @@ def compute_recon_error(recon_path, gt_path, num_pts=10000):
     cd = compute_chamfer(recon_pts, gt_pts)
     f1, _, _ = compute_f1(recon_pts, gt_pts)
     return cd, f1
+
+
+def compute_recon_error_pts(recon_path, gt_pts, num_pts=10000):
+    recon_mesh = trimesh.load(recon_path)
+    if isinstance(recon_mesh, trimesh.Scene):
+        recon_mesh = recon_mesh.dump().sum()
+
+    recon_pts = np.array(trimesh.sample.sample_surface(recon_mesh, 100000)[0])
+
+    # Normalize points
+    recon_pts = normalize_pts(recon_pts)
+    gt_pts = normalize_pts(gt_pts)
+
+    # downsample pts
+    pts, _ = sample_farthest_points(torch.Tensor(gt_pts).unsqueeze(0).cuda(), K=num_pts)
+    gt_pts = pts.cpu().numpy()[0]
+    gt_pts = axis_align(gt_pts)
+
+    pts, _ = sample_farthest_points(
+        torch.Tensor(recon_pts).unsqueeze(0).cuda(), K=num_pts
+    )
+    recon_pts = pts.cpu().numpy()[0]
+    recon_pts = axis_align(recon_pts)
+
+    cd = compute_chamfer(recon_pts, gt_pts)
+    f1, _, _ = compute_f1(recon_pts, gt_pts)
+    return cd, f1
