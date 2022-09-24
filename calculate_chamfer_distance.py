@@ -138,13 +138,7 @@ def compute_recon_error(recon_path, gt_path, num_pts=10000):
     return cd, f1
 
 
-def compute_recon_error_pts(recon_path, gt_pts, num_pts=10000):
-    recon_mesh = trimesh.load(recon_path)
-    if isinstance(recon_mesh, trimesh.Scene):
-        recon_mesh = recon_mesh.dump().sum()
-
-    recon_pts = np.array(trimesh.sample.sample_surface(recon_mesh, 100000)[0])
-
+def compute_recon_error_pts(recon_pts, gt_pts, num_pts=10000):
     # Normalize points
     recon_pts = normalize_pts(recon_pts)
     gt_pts = normalize_pts(gt_pts)

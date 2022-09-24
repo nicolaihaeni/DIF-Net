@@ -13,6 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import h5py
 import yaml
 import random
+import trimesh
 import numpy as np
 from datasets.pascal3d import Pascal3dDataset
 import utils, training_loop, loss, modules, meta_modules
@@ -93,6 +94,7 @@ for ii, filename in enumerate(file_names):
     basename = os.path.basename(filename).split(".")[0]
 
     # Get the right camera pose
+    rot_pascal3d_shapenet = utils.rotate_pascal3d_to_shapenet()
     with h5py.File(meta_params["gt_dir"]) as hf:
         names = hf["Names"][:].tolist()
         names = [f[0].decode()[1:] for f in names]
@@ -100,12 +102,18 @@ for ii, filename in enumerate(file_names):
         gt_points = hf["points"][index][:, :3]
         gt_cam_pose = hf["poses"][index]
 
+        # Transform the ground truth points to shapenet coordinate frame for visualization
+        gt_points = np.concatenate([gt_points, np.ones_like(gt_points)], -1)[:, :4]
+        gt_points = (
+            utils.rotate_pascal3d_gt_to_shapenet() @ gt_points.transpose()
+        ).transpose()[:, :3]
+
     if opt.use_gt_poses:
-        cam_pose = np.linalg.inv(gt_cam_pose)
+        cam_pose = rot_pascal3d_shapenet @ np.linalg.inv(gt_cam_pose)
     else:
         index = cam_poses["names"].index(basename)
         rot_x = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
-        cam_pose = rot_x @ cam_poses["est_w_T_cam"][index]
+        cam_pose = utils.rotate_pascal3d_to_shapenet() @ cam_poses["est_w_T_cam"][index]
 
     # if already embedded, pass
     recon_name = os.path.join(mesh_path, f"{basename}.ply")
@@ -140,6 +148,7 @@ for ii, filename in enumerate(file_names):
             gt_points=gt_points,
             **meta_params,
         )
+        break
 
 for ii, filename in enumerate(file_names):
     print(filename)
@@ -151,9 +160,26 @@ for ii, filename in enumerate(file_names):
         index = names.index(basename)
         gt_points = hf["points"][index][:, :3]
 
-    recon_name = os.path.join(mesh_path, f"{basename}.ply")
-    cd, f1 = compute_recon_error_pts(recon_name, gt_points)
+    # Transform the ground truth points to shapenet coordinate frame for visualization
+    gt_points = np.concatenate([gt_points, np.ones_like(gt_points)], -1)[:, :4]
+    gt_points = (
+        utils.rotate_pascal3d_gt_to_shapenet() @ gt_points.transpose()
+    ).transpose()[:, :3]
+
+    recon_path = os.path.join(mesh_path, f"{basename}.ply")
+    recon_mesh = trimesh.load(recon_path)
+    if isinstance(recon_mesh, trimesh.Scene):
+        recon_mesh = recon_mesh.dump().sum()
+
+    recon_pts = np.array(trimesh.sample.sample_surface(recon_mesh, 100000)[0])
+    recon_pts = np.concatenate([recon_pts, np.ones_like(recon_pts)], -1)[:, :4]
+    recon_pts = (
+        utils.rotate_pascal3d_to_shapenet() @ recon_pts.transpose()
+    ).transpose()[:, :3]
+
+    cd, f1 = compute_recon_error_pts(recon_pts, gt_points)
     dict_data.append({"name": filename, "chamfer": cd, "f1": f1})
+    break
 
 chamfer = [f["chamfer"] for f in dict_data]
 f1 = [f["f1"] for f in dict_data]

@@ -244,3 +244,51 @@ def apply_rotation_translation(coords, rotation, translation):
     # apply rotation
     rot_coords = rot_mat.unsqueeze(0) @ coords.permute(0, 2, 1)
     return rot_coords.permute(0, 2, 1) + translation
+
+
+def rotate_pascal3d_gt_to_shapenet():
+    rot_x = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    rot_y = np.array(
+        [
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    return rot_x @ rot_y
+
+
+def rotate_pascal3d_to_shapenet():
+    rot_1 = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    rot_2 = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, -1.0, 0.0, 0.0],
+            [0.0, 0.0, -1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    rot_3 = np.array(
+        [
+            [0.0, 0.0, -1.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    return rot_1 @ rot_2 @ rot_3
