@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import utils
 import sdf_meshing
-from utils import save_checkpoints, to_png, depth_to_png, depth_2_normal
+from utils import save_checkpoints, to_png, depth_to_png, depth_2_normal, rotvec_2_mat
 from loss import compute_depth_normal_loss, compute_normal_loss
 
 
@@ -34,6 +34,7 @@ def train(
     mesh_path=None,
     start_epoch=0,
     gt_points=None,
+    symmetry=None,
     **kwargs,
 ):
 
@@ -61,11 +62,15 @@ def train(
 
         rotation = torch.Tensor([1.0, 0.0, 0.0, 0.0, 1.0, 0.0]).float().cuda()
         rotation.requires_grad = True
+
+        scale = torch.Tensor([1.0]).float().cuda()
+        scale.requires_grad = True
         optim = torch.optim.Adam(
             [
                 {"params": [embedding], "lr": lr},
                 {"params": [translation], "lr": 0.01},
                 {"params": [rotation], "lr": 0.01},
+                {"params": [scale], "lr": 0.01},
             ],
             lr=lr,
         )
@@ -120,7 +125,13 @@ def train(
                     losses = model(model_input, gt, **kwargs)
                 else:
                     losses = model.embedding(
-                        embedding, translation, rotation, model_input, gt
+                        embedding,
+                        translation,
+                        rotation,
+                        scale,
+                        model_input,
+                        gt,
+                        symmetry=symmetry,
                     )
 
                 train_loss = 0.0
@@ -190,14 +201,15 @@ def train(
             import h5py
             import open3d as o3d
 
+            if gt_points is not None:
+                gt_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_points))
+                gt_pcd.paint_uniform_color([1, 0, 0])
+
+                o3d.io.write_point_cloud(
+                    os.path.join(mesh_path, f"{model_name}_gt.ply"), gt_pcd
+                )
+
             partial_pts = train_dataloader.dataset.partial
-            gt_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_points))
-            gt_pcd.paint_uniform_color([1, 0, 0])
-
-            o3d.io.write_point_cloud(
-                os.path.join(mesh_path, f"{model_name}_gt.ply"), gt_pcd
-            )
-
             pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(partial_pts))
             pcd.paint_uniform_color([0, 1, 0])
 
@@ -206,8 +218,12 @@ def train(
             )
 
             # Translate the point cloud
-            translation = translation.detach().cpu().numpy()
-            pcd.translate(translation)
+            trans = translation.detach().cpu().numpy()
+            rot = rotvec_2_mat(rotation).detach().cpu().numpy()
+            s = scale.detach().cpu().numpy()
+            pcd.rotate(rot)
+            pcd.translate(trans)
+            pcd.scale(s)
             pcd.paint_uniform_color([0, 0, 1])
             o3d.io.write_point_cloud(
                 os.path.join(mesh_path, f"{model_name}_after.ply"), pcd

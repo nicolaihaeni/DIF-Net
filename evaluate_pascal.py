@@ -39,7 +39,7 @@ p.add_argument("--config", required=True, help="Evaluation configuration")
 p.add_argument(
     "--use_gt_poses", action="store_true", help="Comparison using ground truth poses"
 )
-# p.add_argument("--sym", action="store_true", help="Enforce symmetry")
+p.add_argument("--symmetry", action="store_true", help="Enforce symmetry")
 
 # load configs
 opt = p.parse_args()
@@ -94,7 +94,6 @@ for ii, filename in enumerate(file_names):
     basename = os.path.basename(filename).split(".")[0]
 
     # Get the right camera pose
-    rot_pascal3d_shapenet = utils.rotate_pascal3d_to_shapenet()
     with h5py.File(meta_params["gt_dir"]) as hf:
         names = hf["Names"][:].tolist()
         names = [f[0].decode()[1:] for f in names]
@@ -109,7 +108,7 @@ for ii, filename in enumerate(file_names):
         ).transpose()[:, :3]
 
     if opt.use_gt_poses:
-        cam_pose = rot_pascal3d_shapenet @ np.linalg.inv(gt_cam_pose)
+        cam_pose = utils.rotate_pascal3d_gt_to_shapenet() @ np.linalg.inv(gt_cam_pose)
     else:
         index = cam_poses["names"].index(basename)
         rot_x = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
@@ -125,7 +124,7 @@ for ii, filename in enumerate(file_names):
             input_file_name=filename,
             cam_pose=cam_pose,
             on_surface_points=4000,
-            symmetry=False,
+            symmetry=opt.symmetry,
         )
 
         dataloader = DataLoader(
@@ -146,9 +145,9 @@ for ii, filename in enumerate(file_names):
             is_train=False,
             dataset=sdf_dataset,
             gt_points=gt_points,
+            use_gt_poses=opt.use_gt_poses,
             **meta_params,
         )
-        break
 
 for ii, filename in enumerate(file_names):
     print(filename)
@@ -172,14 +171,9 @@ for ii, filename in enumerate(file_names):
         recon_mesh = recon_mesh.dump().sum()
 
     recon_pts = np.array(trimesh.sample.sample_surface(recon_mesh, 100000)[0])
-    recon_pts = np.concatenate([recon_pts, np.ones_like(recon_pts)], -1)[:, :4]
-    recon_pts = (
-        utils.rotate_pascal3d_to_shapenet() @ recon_pts.transpose()
-    ).transpose()[:, :3]
 
     cd, f1 = compute_recon_error_pts(recon_pts, gt_points)
     dict_data.append({"name": filename, "chamfer": cd, "f1": f1})
-    break
 
 chamfer = [f["chamfer"] for f in dict_data]
 f1 = [f["f1"] for f in dict_data]

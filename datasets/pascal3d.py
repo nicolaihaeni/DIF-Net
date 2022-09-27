@@ -20,7 +20,6 @@ class Pascal3dDataset(Dataset):
         expand=-1,
         max_points=200000,
         cam_pose=None,
-        symmetry=False,
     ):
         super().__init__()
         self.expand = expand
@@ -29,12 +28,6 @@ class Pascal3dDataset(Dataset):
 
         self.max_points = max_points
         self.on_surface_points = on_surface_points
-
-        # If using symmetry, reflect coordinates along symmetry axis
-        if symmetry:
-            reflected_coords = self.partial.copy()
-            reflected_coords[:, 0] = -reflected_coords[:, 0]
-            self.partial = np.concatenate([self.partial, reflected_coords])
 
         # Compute normals and orient towards camera
         pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(self.partial))

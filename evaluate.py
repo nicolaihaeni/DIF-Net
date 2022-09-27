@@ -38,7 +38,7 @@ p.add_argument("--config", required=True, help="Evaluation configuration")
 p.add_argument(
     "--use_gt_poses", action="store_true", help="Comparison using ground truth poses"
 )
-p.add_argument("--sym", action="store_true", help="Enforce symmetry")
+p.add_argument("--symmetry", action="store_true", help="Enforce symmetry")
 
 # load configs
 opt = p.parse_args()
@@ -134,6 +134,8 @@ for ii, filename in enumerate(file_names):
             is_train=False,
             dataset=sdf_dataset,
             gt_points=gt_pts,
+            gt_pose=opt.use_gt_poses,
+            symmetry=opt.symmetry,
             **meta_params,
         )
 

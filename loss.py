@@ -85,8 +85,6 @@ def embedding_loss(model_output, gt):
     embeddings = model_output["latent_vec"]
     gradient_sdf = model_output["grad_sdf"]
 
-    translation = model_output["translation"]
-
     # sdf regression loss from Sitzmannn et al. 2020
     sdf_constraint = torch.where(
         gt_sdf != -1,
@@ -104,8 +102,6 @@ def embedding_loss(model_output, gt):
     grad_constraint = torch.abs(gradient_sdf.norm(dim=-1) - 1)
 
     embeddings_constraint = torch.mean(embeddings**2)
-
-    translation_constraint = torch.mean(translation**2)
     # -----------------
     return {
         "sdf": torch.abs(sdf_constraint).mean() * 3e3,
@@ -113,7 +109,6 @@ def embedding_loss(model_output, gt):
         "normal_constraint": normal_constraint.mean() * 1e2,
         "grad_constraint": grad_constraint.mean() * 5e1,
         "embeddings_constraint": embeddings_constraint.mean() * 1e6,
-        # "translation_constraint": translation_constraint.mean(),
     }
 
 

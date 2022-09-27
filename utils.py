@@ -136,6 +136,22 @@ def get_pascal_filenames(directory):
     return filennames
 
 
+def get_pix3d_filenames(directory):
+    filennames = [
+        os.path.join(directory, f) for f in sorted(os.listdir(directory)) if ".h5" in f
+    ]
+    return filennames
+
+
+def get_occluded_filenames(directory):
+    filennames = [
+        os.path.join(directory, f)
+        for f in sorted(os.listdir(directory))
+        if "_occluded.h5" in f
+    ]
+    return filennames
+
+
 def normalize(vec):
     return vec / (np.linalg.norm(vec, axis=-1, keepdims=True) + 1e-9)
 
@@ -238,12 +254,16 @@ def rotvec_2_mat(ortho6d):
     return matrix
 
 
-def apply_rotation_translation(coords, rotation, translation):
+def apply_rotation_translation(coords, rotation, translation, scale):
     rot_mat = rotvec_2_mat(rotation)
 
     # apply rotation
     rot_coords = rot_mat.unsqueeze(0) @ coords.permute(0, 2, 1)
-    return rot_coords.permute(0, 2, 1) + translation
+    coords = rot_coords.permute(0, 2, 1) + translation
+
+    scale_mat = torch.tensor([[scale, 0, 0], [0, scale, 0], [0, 0, scale]]).cuda()
+    coords = scale_mat.unsqueeze(0) @ coords.permute(0, 2, 1)
+    return coords.permute(0, 2, 1)
 
 
 def rotate_pascal3d_gt_to_shapenet():

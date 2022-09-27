@@ -184,10 +184,24 @@ class DeformedImplicitField(nn.Module):
         return losses
 
     # for evaluation
-    def embedding(self, embed, translation, rotation, model_input, gt):
+    def embedding(
+        self, embed, translation, rotation, scale, model_input, gt, symmetry=False
+    ):
         model_input["coords"] = apply_rotation_translation(
-            model_input["coords"], rotation, translation
+            model_input["coords"], rotation, translation, scale
         )
+
+        # Reflect coordinates and normals along y-z axis
+        if symmetry:
+            reflected_coords = model_input["coords"].clone()
+            reflected_normals = model_input["normals"].clone()
+            reflected_coords[:, 0] *= -1.0
+            reflected_normals[:, 0] *= -1.0
+            model_input["coords"] = torch.cat([model_input["coords"], reflected_coords])
+            model_input["normals"] = torch.cat(
+                [model_input["normals"], reflected_normals]
+            )
+
         coords = model_input["coords"]  # 3 dimensional input coordinates
 
         # get network weights for Deform-net using Hyper-net

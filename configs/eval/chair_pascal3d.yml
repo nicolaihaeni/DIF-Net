@@ -1,4 +1,4 @@
-experiment_name: 'chair_pascal_3d_eval'
+experiment_name: 'chair_pascal3d_eval'
 checkpoint_path: 'models/chair/checkpoints/model_epoch_0060.pth'
 root_dir: /home/isleri/shared/test_data/pascal3d_chair/
 gt_dir: /home/isleri/shared/test_data/pascal3d_chair/pascal3d_imagenet_chair_val.h5
