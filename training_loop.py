@@ -203,16 +203,12 @@ def train(
 
             if gt_points is not None:
                 gt_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(gt_points))
-                gt_pcd.paint_uniform_color([1, 0, 0])
-
                 o3d.io.write_point_cloud(
                     os.path.join(mesh_path, f"{model_name}_gt.ply"), gt_pcd
                 )
 
             partial_pts = train_dataloader.dataset.partial
             pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(partial_pts))
-            pcd.paint_uniform_color([0, 1, 0])
-
             o3d.io.write_point_cloud(
                 os.path.join(mesh_path, f"{model_name}_before.ply"), pcd
             )

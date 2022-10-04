@@ -17,7 +17,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-import dataset, modules, utils
+import utils
+from datasets.shapenet import ShapenetMultiDataset
 from dif_net import DeformedImplicitField
 import sdf_meshing
 
@@ -40,11 +41,10 @@ with open(os.path.join(opt.config), "r") as stream:
     meta_params = yaml.safe_load(stream)
 
 # define dataloader
-test_dataset = dataset.PointCloudMultiDataset(
+test_dataset = ShapenetMultiDataset(
     utils.get_filenames(meta_params["root_dir"], meta_params["split_file"]),
     on_surface_points=1000,
     max_points=1000,
-    train=True,
 )
 
 dataloader = DataLoader(
@@ -61,7 +61,7 @@ print("Total subjects: ", len(test_dataset))
 
 # define DIF-Net
 model = DeformedImplicitField(**meta_params).cuda()
-model.load_state_dict(torch.load(meta_params["checkpoint_path"]))
+model.load_state_dict(torch.load(meta_params["checkpoint_path"])["model_state_dict"])
 model.eval()
 
 # create save path
@@ -78,11 +78,11 @@ for step, (model_input, gt) in enumerate(dataloader):
     model_input = {key: value.cuda() for key, value in model_input.items()}
     gt = {key: value.cuda() for key, value in gt.items()}
 
-    # Save the input point cloud
-    sdf_meshing.save_poincloud_ply(
-        model_input["farthest_points"].squeeze(0).detach().cpu().numpy(),
-        os.path.join(mesh_path, f"model_{step}_input.ply"),
-    )
+    # # Save the input point cloud
+    # sdf_meshing.save_poincloud_ply(
+    # model_input["farthest_points"].squeeze(0).detach().cpu().numpy(),
+    # os.path.join(mesh_path, f"model_{step}_input.ply"),
+    # )
 
     embedding = model.get_latent_code(torch.tensor([step]).cuda())
 

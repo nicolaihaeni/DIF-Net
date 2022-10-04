@@ -124,7 +124,6 @@ for ii, filename in enumerate(file_names):
             input_file_name=filename,
             cam_pose=cam_pose,
             on_surface_points=4000,
-            symmetry=opt.symmetry,
         )
 
         dataloader = DataLoader(
@@ -172,8 +171,20 @@ for ii, filename in enumerate(file_names):
 
     recon_pts = np.array(trimesh.sample.sample_surface(recon_mesh, 100000)[0])
 
-    cd, f1 = compute_recon_error_pts(recon_pts, gt_points)
+    cd, f1, recon_pts, gt_points = compute_recon_error_pts(recon_pts, gt_points)
     dict_data.append({"name": filename, "chamfer": cd, "f1": f1})
+
+    # Visualize points
+    import open3d as o3d
+
+    points = np.concatenate([gt_points, recon_pts])
+    colors = np.zeros_like(points)
+    colors[: gt_points.shape[0], 0] = 1
+    colors[gt_points.shape[0] :, 1] = 1
+
+    pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    o3d.io.write_point_cloud("./output.ply", pcd)
 
 chamfer = [f["chamfer"] for f in dict_data]
 f1 = [f["f1"] for f in dict_data]

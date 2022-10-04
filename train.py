@@ -11,10 +11,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import yaml
 import io
-import numpy as np
-import dataset, utils, training_loop, loss, modules, meta_modules
+import utils, training_loop
+from datasets.shapenet import ShapenetMultiDataset
 
-import torch
 from torch.utils.data import DataLoader
 import configargparse
 from torch import nn
@@ -121,7 +120,7 @@ if __name__ == "__main__":
             meta_params = yaml.safe_load(stream)
 
     # define dataloader
-    train_dataset = dataset.PointCloudMultiDataset(
+    train_dataset = ShapenetMultiDataset(
         utils.get_filenames(meta_params["root_dir"], meta_params["split_file"]),
         on_surface_points=opt.on_surface_points,
         max_points=meta_params["max_points"],
